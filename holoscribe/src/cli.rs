@@ -8,7 +8,7 @@ use thiserror::Error;
 pub enum CliError {
     #[error("Invalid int specification for size")]
     InvalidSizeInt(ParseIntError),
-    #[error("Invalid size specification")]
+    #[error("Invalid size specification, please use the format: width[xheight](mm|cm|m)")]
     InvalidSize,
 }
 
