@@ -1,52 +1,24 @@
-struct Circle {
-    x: f32,
-    y: f32,
-    r: f32,
-}
-
-#[derive(Debug)]
-struct SVGArc {
-    x0: f32,         // x start point
-    y0: f32,         // y start point
-    rx: f32,         // x radius
-    ry: f32,         // y radius
-    x: f32,          // x end point
-    y: f32,          // y end point
-    x_rot: f32,      // rotation
-    large_arc: bool, // large or small arc
-    sweep: bool,     // positive or negative sweep
-}
-
-impl SVGArc {
-    fn to_svg_path(&self, path_params: &str) -> String {
-        format!(
-            "<path d=\"M {} {} A {} {} {} {} {} {} {}\" {}/>",
-            self.x0,
-            self.y0,
-            self.rx,
-            self.ry,
-            self.x_rot,
-            self.large_arc as u8,
-            self.sweep as u8,
-            self.x,
-            self.y,
-            path_params,
-        )
-        .to_string()
-    }
-}
+use svg::node::element::path::Data;
+use svg::node::element::{Circle, Path};
+use svg::Document;
 
 fn main() {
-    println!("Hello, world!");
-    let c = Circle {
-        x: 150.0,
-        y: 100.0,
-        r: 80.0,
-    };
-    let svg_arc = circular_arc(c, 5.0, 315.0);
+    let c = Circle::new()
+        .set("cx", 150.0)
+        .set("cy", 100.0)
+        .set("r", 80.0)
+        .set("stroke-width", 1)
+        .set("stroke", "white")
+        .set("fill-opacity", 0);
+    let svg_arc = circular_arc(&c, 5.0, 275.0)
+        .set("stroke", "red")
+        .set("stroke-width", 3);
     println!("{svg_arc:?}");
-    let path_params = "stroke=\"red\" stroke-width=\"2\"";
-    println!("{}", svg_arc.to_svg_path(path_params));
+    let document = Document::new()
+        .set("viewBox", (0, 0, 300, 200))
+        .add(c)
+        .add(svg_arc);
+    svg::save("image.svg", &document).unwrap();
 }
 
 /// Given a circle, a cone angle, and an incidence angle, return
@@ -55,20 +27,23 @@ fn main() {
 /// The incidence angle represents where on the circle the center
 /// of the arc will be. An angle of 0 deg is at +X (right of screen),
 /// 90 deg at +Y (top of screen) etc.
-fn circular_arc(circle: Circle, half_cone_angle: f32, incidence_angle: f32) -> SVGArc {
-    let x0 = circle.x + circle.r * (incidence_angle - half_cone_angle).to_radians().cos();
-    let y0 = circle.y - circle.r * (incidence_angle - half_cone_angle).to_radians().sin();
-    let x = circle.x + circle.r * (incidence_angle + half_cone_angle).to_radians().cos();
-    let y = circle.y - circle.r * (incidence_angle + half_cone_angle).to_radians().sin();
-    SVGArc {
-        x0,
-        y0,
-        rx: circle.r,
-        ry: circle.r,
-        x,
-        y,
-        x_rot: 0.0,
-        large_arc: false,
-        sweep: true,
-    }
+fn circular_arc(circle: &Circle, half_cone_angle: f32, incidence_angle: f32) -> Path {
+    let circle_attrs = circle.get_attributes();
+    let cx = circle_attrs["cx"]
+        .parse::<f32>()
+        .expect("Circle should have an x-coordinate");
+    let cy = circle_attrs["cy"]
+        .parse::<f32>()
+        .expect("Circle should have a y-coordinate");
+    let r = circle_attrs["r"]
+        .parse::<f32>()
+        .expect("Circle should have a radius");
+    let x0 = cx + r * (incidence_angle - half_cone_angle).to_radians().cos();
+    let y0 = cy - r * (incidence_angle - half_cone_angle).to_radians().sin();
+    let x = cx + r * (incidence_angle + half_cone_angle).to_radians().cos();
+    let y = cy - r * (incidence_angle + half_cone_angle).to_radians().sin();
+    let path_data = Data::new()
+        .move_to((x0, y0))
+        .elliptical_arc_to((r, r, 0, 0, 0, x, y));
+    Path::new().set("d", path_data)
 }
