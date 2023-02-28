@@ -17,15 +17,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let user_defined_model = obj_from_file(args.input).unwrap();
     let interpolated_points = interpolate_edges(user_defined_model, 15);
 
-    let arc_strat = scriber::DebugScriber {
-        plane_start: -1.0,
-        plane_end: 1.0,
-        min_size: 0.1,
-        max_size: 0.4,
-    };
+    let circle_strat = scriber::CircleScriber {};
+    let scriber = scriber::Scriber::new(circle_strat, args.canvas_size);
 
-    let scriber = scriber::Scriber::new(arc_strat);
     let svg = scriber.scribe(&interpolated_points);
+
     svg::save(args.output, &svg).expect("failed to save");
     Ok(())
 }
