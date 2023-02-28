@@ -120,6 +120,7 @@ mod tests {
 
         // Test invalid size specifications
         assert_eq!(parse_size("10x"), Err(CliError::InvalidSize));
+        assert_eq!(parse_size("10"), Err(CliError::InvalidSize));
         assert_eq!(parse_size("312xmm"), Err(CliError::InvalidSize));
         assert_eq!(parse_size("10x10ft"), Err(CliError::InvalidSize));
         assert_eq!(parse_size("-10x10mm"), Err(CliError::InvalidSize));
