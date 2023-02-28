@@ -3,11 +3,15 @@ use svg::node::element::{Circle, Path};
 use svg::parser::Event;
 use svg::Document;
 
-const VIEW_ANGLE_DEG: f32 = 85.;
+mod cli;
+use clap::Parser;
+const VIEW_ANGLE_DEG: f32 = 100.;
 const HOLOD_WIDTH_DEG: f32 = 3.5;
 
 fn main() {
-    let input_circles = parse_svg_circles("circles.svg").expect("valid input file");
+    let args = cli::Args::parse();
+
+    let input_circles = parse_svg_circles(&args.input_svg).expect("valid input file");
     let mut document = Document::new().set("viewBox", (0, 0, 300, 200)).clone();
     for circle in input_circles {
         let new_circle = circle
@@ -22,7 +26,7 @@ fn main() {
             .set("stroke-width", 3);
         document = document.add(svg_arc);
     }
-    svg::save("image.svg", &document).unwrap();
+    svg::save(args.output_svg, &document).unwrap();
 }
 
 /// Open an SVG file and return a vector of all circles found in that file.
