@@ -5,10 +5,13 @@ use clap::Parser;
 #[command(propagate_version = true)]
 pub struct Args {
     /// Input file: expects a .svg with circles
-    #[arg(short, long)]
+    // #[arg]
     pub input_svg: String,
 
     /// Output file: expects .svg
-    #[arg(short, long)]
+    // #[arg]
     pub output_svg: String,
+
+    /// X position of light source
+    pub lx: f32,
 }

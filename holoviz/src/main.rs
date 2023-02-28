@@ -5,13 +5,26 @@ use svg::Document;
 
 mod cli;
 use clap::Parser;
-const VIEW_ANGLE_DEG: f32 = 100.;
-const HOLOD_WIDTH_DEG: f32 = 3.5;
+const HOLO_WIDTH_DEG: f32 = 3.5;
+// distance of light source from top of SVG canvas
+// Light source is assumed to be centered above canvas for now
+const LIGHT_SOURCE_DIST: f32 = 100.0; // TODO: Make parameter
+
+struct Point {
+    x: f32,
+    y: f32,
+}
 
 fn main() {
     let args = cli::Args::parse();
 
     let input_circles = parse_svg_circles(&args.input_svg).expect("valid input file");
+    // TODO: Make size of output canvas same size as input canvas
+    let light_source = Point {
+        x: args.lx, // TODO: Make optional, default at center of canvas
+        y: -LIGHT_SOURCE_DIST,
+    };
+    // TODO: Break out into separate function
     let mut document = Document::new().set("viewBox", (0, 0, 300, 200)).clone();
     for circle in input_circles {
         let new_circle = circle
@@ -21,12 +34,36 @@ fn main() {
             .set("stroke-opacity", 0.5)
             .set("fill-opacity", 0);
         document = document.add(new_circle);
-        let svg_arc = circular_arc(&circle, HOLOD_WIDTH_DEG, VIEW_ANGLE_DEG)
+        let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &light_source)
             .set("stroke", "red")
             .set("stroke-width", 3);
         document = document.add(svg_arc);
     }
     svg::save(args.output_svg, &document).unwrap();
+}
+
+// TODO: Make this function simply return the incidence angle rather than passing
+// half_cone_angle through unmodified
+fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &Point) -> Path {
+    let circle_attrs = circle.get_attributes();
+    let cx = circle_attrs["cx"]
+        .parse::<f32>()
+        .expect("Circle should have an x-coordinate");
+    let cy = circle_attrs["cy"]
+        .parse::<f32>()
+        .expect("Circle should have a y-coordinate");
+    // let r = circle_attrs["r"]
+    //     .parse::<f32>()
+    //     .expect("Circle should have a radius");
+    let dx = light_source.x - cx;
+    let dy = light_source.y - cy;
+    let mut theta = (-dy / dx).atan();
+    if theta < 0f32 {
+        //} std::f32::consts::PI {
+        theta -= std::f32::consts::PI;
+    }
+
+    circular_arc(circle, half_cone_angle, theta.to_degrees())
 }
 
 /// Open an SVG file and return a vector of all circles found in that file.
@@ -39,10 +76,10 @@ fn parse_svg_circles(filename: &str) -> Result<Vec<Circle>, std::io::Error> {
     for event in parser {
         match event {
             Event::Tag("circle", _, attributes) => {
-                println!(
-                    "Found a circle at x={}",
-                    attributes.get("cx").expect("should have x-coord")
-                );
+                // println!(
+                //     "Found a circle at x={}",
+                //     attributes.get("cx").expect("should have x-coord")
+                // );
                 let new_circle = Circle::new()
                     .set("cx", attributes["cx"].clone())
                     .set("cy", attributes["cy"].clone())
