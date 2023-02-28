@@ -9,7 +9,6 @@ use obj::Obj;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // TODO: use Clap if this gets unwieldy in the future
     let args = Args::parse();
     let user_defined_model = obj_from_file(args.input).unwrap();
     let verts = user_defined_model.data.position;
