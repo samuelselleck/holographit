@@ -1,26 +1,58 @@
 use svg::node::element::path::Data;
 use svg::node::element::{Circle, Path};
+use svg::parser::Event;
 use svg::Document;
 
+const VIEW_ANGLE_DEG: f32 = 85.;
+const HOLOD_WIDTH_DEG: f32 = 3.5;
+
 fn main() {
-    let c = Circle::new()
-        .set("cx", 150.0)
-        .set("cy", 100.0)
-        .set("r", 80.0)
-        .set("stroke-width", 1)
-        .set("stroke", "white")
-        .set("fill-opacity", 0);
-    let svg_arc = circular_arc(&c, 5.0, 275.0)
-        .set("stroke", "red")
-        .set("stroke-width", 3);
-    println!("{svg_arc:?}");
-    let document = Document::new()
-        .set("viewBox", (0, 0, 300, 200))
-        .add(c)
-        .add(svg_arc);
+    let input_circles = parse_svg_circles("circles.svg").expect("valid input file");
+    let mut document = Document::new().set("viewBox", (0, 0, 300, 200)).clone();
+    for circle in input_circles {
+        let new_circle = circle
+            .clone()
+            .set("stroke-width", 1)
+            .set("stroke", "grey")
+            .set("stroke-opacity", 0.5)
+            .set("fill-opacity", 0);
+        document = document.add(new_circle);
+        let svg_arc = circular_arc(&circle, HOLOD_WIDTH_DEG, VIEW_ANGLE_DEG)
+            .set("stroke", "red")
+            .set("stroke-width", 3);
+        document = document.add(svg_arc);
+    }
     svg::save("image.svg", &document).unwrap();
 }
 
+/// Open an SVG file and return a vector of all circles found in that file.
+/// This function only returns geometric definitions (cx, cy, and r), and drops
+/// any non-geometric attributes such as stroke, fill, color, etc.
+fn parse_svg_circles(filename: &str) -> Result<Vec<Circle>, std::io::Error> {
+    let mut content = String::new();
+    let parser = svg::open(filename, &mut content)?;
+    let mut circles = vec![];
+    for event in parser {
+        match event {
+            Event::Tag("circle", _, attributes) => {
+                println!(
+                    "Found a circle at x={}",
+                    attributes.get("cx").expect("should have x-coord")
+                );
+                let new_circle = Circle::new()
+                    .set("cx", attributes["cx"].clone())
+                    .set("cy", attributes["cy"].clone())
+                    .set("r", attributes["r"].clone());
+                circles.push(new_circle);
+            }
+            _ => {
+                // println!("Sorry I can only do circles rn");
+                continue;
+            }
+        }
+    }
+    Ok(circles)
+}
 /// Given a circle, a cone angle, and an incidence angle, return
 /// a SVGArc. The cone_angle represents the width of the arc in degrees;
 /// A cone angle of 360 will simply return a full circle.
