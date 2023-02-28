@@ -28,7 +28,7 @@ pub struct Args {
 
     /// The size of the image you which to create. Requires the format: width[xheight](mm|cm|m)
     #[arg(short, long, value_parser=parse_size)]
-    pub size: Size,
+    pub canvas_size: CanvasSize,
 
     /// The density of lines etched per mm. Defaults to 1.
     #[arg(long, default_value_t = 1)]
@@ -37,12 +37,12 @@ pub struct Args {
 
 /// Represents a size in millimeters
 #[derive(Debug, Clone, PartialEq)]
-pub struct Size {
+pub struct CanvasSize {
     pub width: usize,
     pub height: usize,
 }
 
-fn parse_size(arg: &str) -> Result<Size, CliError> {
+fn parse_size(arg: &str) -> Result<CanvasSize, CliError> {
     let re = Regex::new(r"^(\d+|\d+x\d+)(mm|cm|m)$").unwrap();
     if let Some(cap) = re.captures(arg) {
         let unit = cap.get(2).expect("Regex requires a unit").as_str();
@@ -71,7 +71,7 @@ fn parse_size(arg: &str) -> Result<Size, CliError> {
         };
 
         // Normalize size to millimeters
-        Ok(Size {
+        Ok(CanvasSize {
             width: width * factor,
             height: height * factor,
         })
@@ -82,40 +82,37 @@ fn parse_size(arg: &str) -> Result<Size, CliError> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::{
-        IntErrorKind::{self, PosOverflow},
-        ParseIntError,
-    };
+    use std::num::IntErrorKind;
 
-    use crate::cli::{parse_size, CliError, Size};
+    use crate::cli::{parse_size, CanvasSize, CliError};
 
     #[test]
     fn test_parse_size() {
         // Check that sizes are parsed and units are applied
         assert_eq!(
             parse_size("10x10mm"),
-            Ok(Size {
+            Ok(CanvasSize {
                 width: 10,
                 height: 10
             })
         );
         assert_eq!(
             parse_size("10x50cm"),
-            Ok(Size {
+            Ok(CanvasSize {
                 width: 100,
                 height: 500
             })
         );
         assert_eq!(
             parse_size("10cm"),
-            Ok(Size {
+            Ok(CanvasSize {
                 width: 100,
                 height: 100
             })
         );
         assert_eq!(
             parse_size("2x1m"),
-            Ok(Size {
+            Ok(CanvasSize {
                 width: 2000,
                 height: 1000
             })
