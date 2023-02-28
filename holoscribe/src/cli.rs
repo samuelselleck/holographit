@@ -43,39 +43,34 @@ pub struct Size {
 }
 
 fn parse_size(arg: &str) -> Result<Size, CliError> {
-    let re = Regex::new(r"^(\d+)x?(\d*)(mm|cm|m)$").unwrap();
+    let re = Regex::new(r"^(\d+|\d+x\d+)(mm|cm|m)$").unwrap();
     if let Some(cap) = re.captures(arg) {
-        // We always expect to match the first group (width)
-        let width_str = cap.get(1).unwrap().as_str();
-        let width = width_str
-            .parse::<usize>()
-            .map_err(|e| CliError::InvalidSizeInt(e))?;
-
-        // The second group (height) is optional, without it just use width
-        let height = if let Some(height) = cap.get(2) {
-            let height_str = height.as_str();
-            if height_str.len() > 0 {
-                height
-                    .as_str()
-                    .parse::<usize>()
-                    .map_err(|e| CliError::InvalidSizeInt(e))?
-            } else {
-                width
-            }
-        } else {
-            width
-        };
-
-        // We always expect to have a unit
-        let unit = cap.get(3).unwrap().as_str();
-
-        // Normalize to mm
+        let unit = cap.get(2).expect("Regex requires a unit").as_str();
         let factor = match unit {
             "mm" => 1,
             "cm" => 10,
             "m" => 1000,
             _ => panic!("Regex should not have allowed any other unit string"),
         };
+
+        let size_str = cap.get(1).expect("Regex requires a size").as_str();
+        let (width, height) = if let Some((width, height)) = size_str.split_once('x') {
+            (
+                width
+                    .parse::<usize>()
+                    .map_err(|e| CliError::InvalidSizeInt(e))?,
+                height
+                    .parse::<usize>()
+                    .map_err(|e| CliError::InvalidSizeInt(e))?,
+            )
+        } else {
+            let width = size_str
+                .parse::<usize>()
+                .map_err(|e| CliError::InvalidSizeInt(e))?;
+            (width, width)
+        };
+
+        // Normalize size to millimeters
         Ok(Size {
             width: width * factor,
             height: height * factor,
@@ -128,6 +123,7 @@ mod tests {
 
         // Test invalid size specifications
         assert_eq!(parse_size("10x"), Err(CliError::InvalidSize));
+        assert_eq!(parse_size("312xmm"), Err(CliError::InvalidSize));
         assert_eq!(parse_size("10x10ft"), Err(CliError::InvalidSize));
         assert_eq!(parse_size("-10x10mm"), Err(CliError::InvalidSize));
 
