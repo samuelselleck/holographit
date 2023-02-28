@@ -3,16 +3,14 @@ mod scriber;
 //cli accepts obj file and svg location (and optional parameters)
 mod cli;
 
+use clap::Parser;
+use cli::Args;
 use obj::Obj;
-use std::env;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // TODO: use Clap if this gets unwieldy in the future
-    let args: Vec<String> = env::args().collect();
-    let input_model_file_path = args[1].clone();
-
-    let user_defined_model = obj_from_file(input_model_file_path).unwrap();
+    let args = Args::parse();
+    let user_defined_model = obj_from_file(args.input).unwrap();
     let verts = user_defined_model.data.position;
 
     let arc_strat = scriber::DebugScriber {
@@ -24,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let scriber = scriber::Scriber::new(arc_strat);
     let svg = scriber.scribe(&verts);
 
-    svg::save("test.svg", &svg).expect("failed to save");
+    svg::save(args.output, &svg).expect("failed to save");
     Ok(())
 }
 

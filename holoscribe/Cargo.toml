@@ -8,5 +8,7 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.1.6", features = ["derive"] }
 obj = "0.10.2"
+regex = "1"
 svg = "0.13.0"
 thiserror = "1.0.38"
+
