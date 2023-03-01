@@ -10,6 +10,8 @@ const HOLO_WIDTH_DEG: f32 = 3.5;
 // Light source is assumed to be centered above canvas for now
 const LIGHT_SOURCE_DIST: f32 = 60.0; // TODO: Make parameter
 
+const DEFAULT_WIDTH: f32 = 500.;
+const DEFAULT_HEIGHT: f32 = 500.;
 struct Point {
     x: f32,
     y: f32,
@@ -20,7 +22,8 @@ fn main() {
     let svg_contents = read_svg(&args.input_svg).expect("valid input file");
 
     let input_circles = parse_svg_circles(&svg_contents);
-    let extents = parse_viewbox_extents(&svg_contents).expect("valid input file");
+    let extents = parse_viewbox_extents(&svg_contents);
+    println!("{:?}", extents);
     // TODO: Make size of output canvas same size as input canvas
     let light_source = Point {
         x: args.lx, // TODO: Make optional, default at center of canvas
@@ -73,26 +76,49 @@ fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &P
 
     circular_arc(circle, half_cone_angle, theta.to_degrees())
 }
-fn parse_viewbox_extents(svg_contents: &String) -> Option<(f32, f32, f32, f32)> {
+
+/// Given the contents of an SVG file, determine the extents of the drawing
+/// to be used in lightsource application. Returns a 4-tuple of floats in the
+/// form (xmin, ymin, xmax, ymax). If the viewBox attribute has been set in the top-level
+/// <svg> tag, the extents will be equal to the viewBox. Otherwise the
+/// xmin and ymin values will be set to zero, and xmax and ymax will be set
+/// to the "width" and "height" parameters from the top-level <svg> tag. If these
+/// are now found, we resort to defaults. Panics if no top level svg tag found.
+fn parse_viewbox_extents(svg_contents: &String) -> (f32, f32, f32, f32) {
     let svg_tag = svg::Parser::new(&svg_contents)
         .next()
         .expect("empty svg file");
     println!("{:?}", svg_tag);
     let extents: Vec<f32> = match svg_tag {
-        Event::Tag("svg", _, attributes) => attributes["viewBox"]
-            .clone()
-            .split(' ')
-            .map(|b| b.parse::<f32>().expect("invalid view bounds!"))
-            .collect(),
+        Event::Tag("svg", _, attributes) => {
+            if let Some(view_box) = attributes.get("viewBox") {
+                view_box
+                    .clone()
+                    .split(' ') // TODO: Handle svgs that use comma-separated values
+                    .map(|b| b.parse::<f32>().expect("invalid view bounds!"))
+                    .collect()
+            } else {
+                let width = match attributes.get("width") {
+                    Some(w) => w.parse::<f32>().expect("invalid width!"),
+                    None => DEFAULT_WIDTH,
+                };
+                let height = match attributes.get("height") {
+                    Some(h) => h.parse::<f32>().expect("invalid height!"),
+                    None => DEFAULT_HEIGHT,
+                };
+                vec![0., 0., width, height]
+            }
+        }
         _ => {
             // println!("{:?}", svg_tag);
             panic!("file does not open with <svg> tag with viewBox value!");
         }
     };
     assert_eq!(extents.len(), 4, "invalid number of view bounds");
-    println!("{extents:?}");
-    Some((0., 0., 0., 0.))
+    // TODO: Clean up, make a nicer way to build this tuple
+    (extents[0], extents[1], extents[2], extents[3])
 }
+
 /// Open an SVG file and return a vector of all circles found in that file.
 /// This function only returns geometric definitions (cx, cy, and r), and drops
 /// any non-geometric attributes such as stroke, fill, color, etc.
@@ -121,6 +147,7 @@ fn parse_svg_circles(svg_contents: &String) -> Vec<Circle> {
     }
     circles
 }
+
 /// Given a circle, a cone angle, and an incidence angle, return
 /// a SVGArc. The cone_angle represents the width of the arc in degrees;
 /// A cone angle of 360 will simply return a full circle.
