@@ -8,7 +8,6 @@ use clap::Parser;
 const HOLO_WIDTH_DEG: f32 = 3.5;
 // distance of light source from top of SVG canvas
 // Light source is assumed to be centered above canvas for now
-const LIGHT_SOURCE_DIST: f32 = 60.0; // TODO: Make parameter
 
 const DEFAULT_WIDTH: f32 = 500.;
 const DEFAULT_HEIGHT: f32 = 500.;
@@ -23,20 +22,40 @@ struct Point {
 
 fn main() {
     let args = cli::Args::parse();
-    let svg_contents = read_svg(&args.input_svg).expect("valid input file");
 
+    animate_hologram(
+        &args.input_svg,
+        &args.output_svg,
+        args.num_steps,
+        args.lxmin,
+        args.lxmax,
+        args.ly,
+    )
+    .unwrap();
+    // After running this, run the following:
+    // ffmpeg -f image2 -framerate 15 -i <output_svg>%03d.svg output.gif
+    // build_hologram(&input_circles, extents, &light_source, args.output_svg);
+}
+
+/// Make an animated hologram based on curves in an input file.
+/// This function generates num_steps * 2 .svg files, which are intended
+/// to be stiched together into an animated .gif using a command such as
+/// `ffmpeg -f image2 -framerate 15 -i <output_svg>%03d.svg output.gif`
+/// The animation will reverse to make a complete loop.
+///
+/// ls_min and ls_max are the minimum and maximum locations of the light
+/// source relative to the width of the canvas, respectively.
+fn animate_hologram(
+    input_file: &str,
+    output_handle: &str,
+    num_steps: u32,
+    ls_min: f32,
+    ls_max: f32,
+    ly: f32,
+) -> Result<(), std::io::Error> {
+    let svg_contents = read_svg(input_file).expect("valid input file");
     let input_circles = parse_svg_circles(&svg_contents);
     let extents = parse_viewbox_extents(&svg_contents);
-
-    // TODO: Make size of output canvas same size as input canvas
-    let light_source = Point {
-        x: args.lx, // TODO: Make optional, default at center of canvas
-        y: -LIGHT_SOURCE_DIST,
-    };
-
-    let num_steps = 20;
-    let ls_min = 0.35;
-    let ls_max = 0.65;
     let width = extents.2 - extents.0;
     let step_size = width * (ls_max - ls_min) / num_steps as f32;
     println!("Image has width of {width}, using step size of {step_size}");
@@ -45,15 +64,12 @@ fn main() {
             true => width * ls_min + image as f32 * step_size,
             false => width * ls_max - (image - num_steps) as f32 * step_size,
         };
-        let ls = Point {
-            x: lsx,
-            y: -LIGHT_SOURCE_DIST,
-        };
-        let filename = format!("{}{image:03}.svg", args.output_svg);
-        build_hologram(&input_circles, extents, &ls, filename);
+        let ls = Point { x: lsx, y: -ly };
+        let filename = format!("{}{image:03}.svg", output_handle);
+        build_hologram(&input_circles, extents, &ls, filename)?;
         // println!("{filename} - {}", ls.x)
     }
-    // build_hologram(&input_circles, extents, &light_source, args.output_svg);
+    Ok(())
 }
 
 fn build_hologram(
