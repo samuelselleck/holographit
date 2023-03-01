@@ -8,7 +8,7 @@ use clap::Parser;
 const HOLO_WIDTH_DEG: f32 = 3.5;
 // distance of light source from top of SVG canvas
 // Light source is assumed to be centered above canvas for now
-const LIGHT_SOURCE_DIST: f32 = 100.0; // TODO: Make parameter
+const LIGHT_SOURCE_DIST: f32 = 60.0; // TODO: Make parameter
 
 struct Point {
     x: f32,
@@ -17,29 +17,37 @@ struct Point {
 
 fn main() {
     let args = cli::Args::parse();
+    let svg_contents = read_svg(&args.input_svg).expect("valid input file");
 
-    let input_circles = parse_svg_circles(&args.input_svg).expect("valid input file");
+    let input_circles = parse_svg_circles(&svg_contents);
+    let extents = parse_viewbox_extents(&svg_contents).expect("valid input file");
     // TODO: Make size of output canvas same size as input canvas
     let light_source = Point {
         x: args.lx, // TODO: Make optional, default at center of canvas
         y: -LIGHT_SOURCE_DIST,
     };
     // TODO: Break out into separate function
-    let mut document = Document::new().set("viewBox", (0, 0, 300, 200)).clone();
+    let mut document = Document::new().set("viewBox", (-20, -20, 41, 41)).clone();
     for circle in input_circles {
         let new_circle = circle
             .clone()
-            .set("stroke-width", 1)
+            .set("stroke-width", 0.05)
             .set("stroke", "grey")
-            .set("stroke-opacity", 0.5)
+            .set("stroke-opacity", 0.05)
             .set("fill-opacity", 0);
         document = document.add(new_circle);
         let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &light_source)
             .set("stroke", "red")
-            .set("stroke-width", 3);
+            .set("stroke-width", 0.15);
         document = document.add(svg_arc);
     }
     svg::save(args.output_svg, &document).unwrap();
+}
+
+fn read_svg(filename: &str) -> Result<String, std::io::Error> {
+    let mut content = String::new();
+    svg::open(filename, &mut content)?;
+    Ok(content)
 }
 
 // TODO: Make this function simply return the incidence angle rather than passing
@@ -65,13 +73,31 @@ fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &P
 
     circular_arc(circle, half_cone_angle, theta.to_degrees())
 }
-
+fn parse_viewbox_extents(svg_contents: &String) -> Option<(f32, f32, f32, f32)> {
+    let svg_tag = svg::Parser::new(&svg_contents)
+        .next()
+        .expect("empty svg file");
+    println!("{:?}", svg_tag);
+    let extents: Vec<f32> = match svg_tag {
+        Event::Tag("svg", _, attributes) => attributes["viewBox"]
+            .clone()
+            .split(' ')
+            .map(|b| b.parse::<f32>().expect("invalid view bounds!"))
+            .collect(),
+        _ => {
+            // println!("{:?}", svg_tag);
+            panic!("file does not open with <svg> tag with viewBox value!");
+        }
+    };
+    assert_eq!(extents.len(), 4, "invalid number of view bounds");
+    println!("{extents:?}");
+    Some((0., 0., 0., 0.))
+}
 /// Open an SVG file and return a vector of all circles found in that file.
 /// This function only returns geometric definitions (cx, cy, and r), and drops
 /// any non-geometric attributes such as stroke, fill, color, etc.
-fn parse_svg_circles(filename: &str) -> Result<Vec<Circle>, std::io::Error> {
-    let mut content = String::new();
-    let parser = svg::open(filename, &mut content)?;
+fn parse_svg_circles(svg_contents: &String) -> Vec<Circle> {
+    let parser = svg::Parser::new(&svg_contents);
     let mut circles = vec![];
     for event in parser {
         match event {
@@ -87,12 +113,13 @@ fn parse_svg_circles(filename: &str) -> Result<Vec<Circle>, std::io::Error> {
                 circles.push(new_circle);
             }
             _ => {
+                // println!("{:?}", event);
                 // println!("Sorry I can only do circles rn");
                 continue;
             }
         }
     }
-    Ok(circles)
+    circles
 }
 /// Given a circle, a cone angle, and an incidence angle, return
 /// a SVGArc. The cone_angle represents the width of the arc in degrees;
