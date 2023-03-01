@@ -23,15 +23,24 @@ fn main() {
 
     let input_circles = parse_svg_circles(&svg_contents);
     let extents = parse_viewbox_extents(&svg_contents);
-    println!("{:?}", extents);
+
     // TODO: Make size of output canvas same size as input canvas
     let light_source = Point {
         x: args.lx, // TODO: Make optional, default at center of canvas
         y: -LIGHT_SOURCE_DIST,
     };
-    // TODO: Break out into separate function
-    let mut document = Document::new().set("viewBox", (-20, -20, 41, 41)).clone();
-    for circle in input_circles {
+
+    build_hologram(&input_circles, extents, &light_source, args.output_svg);
+}
+
+fn build_hologram(
+    circles: &Vec<Circle>,
+    extents: (f32, f32, f32, f32),
+    light_source: &Point,
+    filename: String,
+) -> Result<(), std::io::Error> {
+    let mut document = Document::new().set("viewBox", extents);
+    for circle in circles {
         let new_circle = circle
             .clone()
             .set("stroke-width", 0.05)
@@ -44,7 +53,8 @@ fn main() {
             .set("stroke-width", 0.15);
         document = document.add(svg_arc);
     }
-    svg::save(args.output_svg, &document).unwrap();
+    svg::save(filename, &document)?;
+    Ok(())
 }
 
 fn read_svg(filename: &str) -> Result<String, std::io::Error> {
