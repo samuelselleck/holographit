@@ -174,3 +174,59 @@ fn circular_arc(circle: &Circle, half_cone_angle: f32, incidence_angle: f32) -> 
         .elliptical_arc_to((r, r, 0, 0, 0, x, y));
     Path::new().set("d", path_data)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_extents() {
+        let svg_with_viewbox = String::from(
+            r#"
+<svg
+  height="100" width="30"
+  viewBox="-10 -20 300 100"
+  xmlns="http://www.w3.org/2000/svg"
+  stroke="red"
+  fill="grey">
+  <circle cx="50" cy="50" r="40" />
+</svg>
+        "#,
+        );
+        assert_eq!(
+            parse_viewbox_extents(&svg_with_viewbox),
+            (-10., -20., 300., 100.)
+        );
+        let svg_without_viewbox = String::from(
+            r#"
+<svg
+  height="100" width="30"
+  xmlns="http://www.w3.org/2000/svg"
+  fill="grey">
+  <circle cx="50" cy="50" r="40" />
+</svg>
+        "#,
+        );
+        assert_eq!(
+            parse_viewbox_extents(&svg_without_viewbox),
+            (0., 0., 30., 100.)
+        );
+        assert_eq!(
+            // empty SVG should still get a result
+            parse_viewbox_extents(&String::from("<svg/>")),
+            (0., 0., DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "file does not open with <svg> tag with viewBox value!")]
+    fn test_parse_no_svg_tag() {
+        parse_viewbox_extents(&String::from("<html></html>"));
+    }
+
+    #[test]
+    #[should_panic(expected = "empty svg file")]
+    fn test_parse_empty_svg() {
+        parse_viewbox_extents(&String::new());
+    }
+}
