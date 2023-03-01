@@ -5,15 +5,18 @@ use svg::Document;
 
 mod cli;
 use clap::Parser;
-const HOLO_WIDTH_DEG: f32 = 3.5;
-// distance of light source from top of SVG canvas
-// Light source is assumed to be centered above canvas for now
 
+// width of reflected hologram segments in degrees
+const HOLO_WIDTH_DEG: f32 = 3.5;
+
+// default width & height of an output SVG image in pixels
 const DEFAULT_WIDTH: f32 = 500.;
 const DEFAULT_HEIGHT: f32 = 500.;
 
-const HOLO_WIDTH: f32 = 0.005;
-const CIRCLE_WIDTH: f32 = 0.0001;
+// stroke widths are intended to be fractions of the input file's
+// viewbox width.
+const HOLO_STROKE_WIDTH: f32 = 0.005;
+const CIRCLE_STROKE_WIDTH: f32 = 0.0001;
 
 struct Point {
     x: f32,
@@ -59,6 +62,9 @@ fn animate_hologram(
     let width = extents.2 - extents.0;
     let step_size = width * (ls_max - ls_min) / num_steps as f32;
     println!("Image has width of {width}, using step size of {step_size}");
+    // TODO: update this part of the code so that num_steps is the
+    // _total_ number of frames. Currently returns 2X the number of frames
+    // as the reversal is also computed
     for image in 0..num_steps * 2 {
         let lsx = match image < num_steps {
             true => width * ls_min + image as f32 * step_size,
@@ -66,12 +72,18 @@ fn animate_hologram(
         };
         let ls = Point { x: lsx, y: -ly };
         let filename = format!("{}{image:03}.svg", output_handle);
+        // TODO: Don't build holograms that we've already built when
+        // reversing the animation!
         build_hologram(&input_circles, extents, &ls, filename)?;
         // println!("{filename} - {}", ls.x)
     }
     Ok(())
 }
 
+/// Given one or more circles in an SVG file, the extents of the
+/// viewBox in the input file and a lightsource, make a new SVG
+/// called filename that has the input circles in light grey, and the
+/// reflected portions highlighted in red.
 fn build_hologram(
     circles: &Vec<Circle>,
     extents: (f32, f32, f32, f32),
@@ -82,14 +94,17 @@ fn build_hologram(
     for circle in circles {
         let new_circle = circle
             .clone()
-            .set("stroke-width", (extents.2 - extents.0) * CIRCLE_WIDTH)
+            .set(
+                "stroke-width",
+                (extents.2 - extents.0) * CIRCLE_STROKE_WIDTH,
+            )
             .set("stroke", "grey")
             .set("stroke-opacity", 0.5)
             .set("fill-opacity", 0);
         viewbox = viewbox.add(new_circle);
         let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &light_source)
             .set("stroke", "red")
-            .set("stroke-width", (extents.2 - extents.0) * HOLO_WIDTH);
+            .set("stroke-width", (extents.2 - extents.0) * HOLO_STROKE_WIDTH);
         viewbox = viewbox.add(svg_arc);
     }
     let document = Document::new()
