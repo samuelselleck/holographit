@@ -1,5 +1,5 @@
 use svg::node::element::path::Data;
-use svg::node::element::{Circle, Path};
+use svg::node::element::{Circle, Path, SVG};
 use svg::parser::Event;
 use svg::Document;
 
@@ -12,6 +12,10 @@ const LIGHT_SOURCE_DIST: f32 = 60.0; // TODO: Make parameter
 
 const DEFAULT_WIDTH: f32 = 500.;
 const DEFAULT_HEIGHT: f32 = 500.;
+
+const HOLO_WIDTH: f32 = 0.005;
+const CIRCLE_WIDTH: f32 = 0.0001;
+
 struct Point {
     x: f32,
     y: f32,
@@ -30,7 +34,26 @@ fn main() {
         y: -LIGHT_SOURCE_DIST,
     };
 
-    build_hologram(&input_circles, extents, &light_source, args.output_svg);
+    let num_steps = 20;
+    let ls_min = 0.35;
+    let ls_max = 0.65;
+    let width = extents.2 - extents.0;
+    let step_size = width * (ls_max - ls_min) / num_steps as f32;
+    println!("Image has width of {width}, using step size of {step_size}");
+    for image in 0..num_steps * 2 {
+        let lsx = match image < num_steps {
+            true => width * ls_min + image as f32 * step_size,
+            false => width * ls_max - (image - num_steps) as f32 * step_size,
+        };
+        let ls = Point {
+            x: lsx,
+            y: -LIGHT_SOURCE_DIST,
+        };
+        let filename = format!("{}{image:03}.svg", args.output_svg);
+        build_hologram(&input_circles, extents, &ls, filename);
+        // println!("{filename} - {}", ls.x)
+    }
+    // build_hologram(&input_circles, extents, &light_source, args.output_svg);
 }
 
 fn build_hologram(
@@ -39,20 +62,24 @@ fn build_hologram(
     light_source: &Point,
     filename: String,
 ) -> Result<(), std::io::Error> {
-    let mut document = Document::new().set("viewBox", extents);
+    let mut viewbox = SVG::new().set("viewBox", extents);
     for circle in circles {
         let new_circle = circle
             .clone()
-            .set("stroke-width", 0.05)
+            .set("stroke-width", (extents.2 - extents.0) * CIRCLE_WIDTH)
             .set("stroke", "grey")
-            .set("stroke-opacity", 0.05)
+            .set("stroke-opacity", 0.5)
             .set("fill-opacity", 0);
-        document = document.add(new_circle);
+        viewbox = viewbox.add(new_circle);
         let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &light_source)
             .set("stroke", "red")
-            .set("stroke-width", 0.15);
-        document = document.add(svg_arc);
+            .set("stroke-width", (extents.2 - extents.0) * HOLO_WIDTH);
+        viewbox = viewbox.add(svg_arc);
     }
+    let document = Document::new()
+        .set("width", DEFAULT_WIDTH)
+        .set("height", DEFAULT_HEIGHT)
+        .add(viewbox);
     svg::save(filename, &document)?;
     Ok(())
 }
