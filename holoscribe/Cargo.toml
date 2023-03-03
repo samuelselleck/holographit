@@ -11,5 +11,7 @@ csv = "1.2.0"
 glam = "0.23.0"
 obj = "0.10.2"
 plotters = "0.3.4"
+regex = "1"
 svg = "0.13.0"
 thiserror = "1.0.38"
+
