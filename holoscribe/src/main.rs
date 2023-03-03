@@ -7,12 +7,10 @@ use clap::Parser;
 use cli::Args;
 use glam::f32::Vec3;
 use obj::Obj;
-use plotters::prelude::*;
 use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::error::Error;
 use std::f32::INFINITY;
-use std::{env, io};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
@@ -43,18 +41,18 @@ fn interpolate_edges(obj: Obj, points_per_unit: i32) -> Vec<Vec3> {
     // extract vertices
     //let verts = obj.data.position.clone();
     // extract paths
-    let mut polyPaths: Vec<Vec<usize>> = Vec::new();
+    let mut poly_paths: Vec<Vec<usize>> = Vec::new();
     for simple_poly in obj.data.objects[0].groups[0].polys.clone() {
-        let mut polyPath: Vec<usize> = Vec::new();
+        let mut poly_path: Vec<usize> = Vec::new();
         for vert in simple_poly.0 {
-            polyPath.push(vert.0)
+            poly_path.push(vert.0)
         }
-        polyPaths.push(polyPath)
+        poly_paths.push(poly_path)
     }
 
     let mut edge_set = HashSet::new();
     // sort vertex indices before insert to prevent two-way paths, e.g. 5 -> 7 && 7 -> 5
-    for path in polyPaths {
+    for path in poly_paths {
         edge_set.insert((min(path[0], path[1]), max(path[0], path[1])));
         edge_set.insert((min(path[1], path[2]), max(path[1], path[2])));
         edge_set.insert((min(path[2], path[0]), max(path[2], path[0])));
@@ -93,18 +91,19 @@ fn interpolate_edges(obj: Obj, points_per_unit: i32) -> Vec<Vec3> {
         }
     }
 
+    return vertex_data;
+}
+
+#[allow(dead_code)]
+fn generate_csv(vertices: Vec<Vec3>) {
     // everything below is for manual testing by exporting a CSV file from vertex data:
     let mut wtr = csv::Writer::from_path("./out.csv").unwrap();
-    for vert in &vertex_data {
+    for vert in &vertices {
         wtr.write_record(&[vert.x.to_string(), vert.y.to_string(), vert.z.to_string()])
             .unwrap();
     }
     wtr.flush().unwrap();
-
-    return vertex_data;
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::obj_from_file;
-}
+mod tests {}
