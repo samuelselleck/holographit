@@ -15,7 +15,7 @@ use std::f32::INFINITY;
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let user_defined_model = obj_from_file(args.input).unwrap();
-    let interpolated_points = interpolate_edges(user_defined_model, 15);
+    let interpolated_points = interpolate_edges(user_defined_model, args.stroke_density as i32);
 
     let circle_strat = scriber::CircleScriber {};
     let scriber = scriber::Scriber::new(circle_strat, args.canvas_size);
