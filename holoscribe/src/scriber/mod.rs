@@ -1,8 +1,11 @@
 use glam::Vec3;
 use svg::node::element::path::Data;
-use svg::node::element::Path;
+use svg::node::element::{Circle, Path, SVG};
 use svg::Document;
 
+use crate::cli::CanvasSize;
+
+type Num = f32;
 pub struct DebugScriber {
     pub plane_start: Num,
     pub plane_end: Num,
@@ -18,71 +21,111 @@ impl DebugScriber {
     }
 }
 impl HoloPointStrategy for DebugScriber {
-    fn scribe_point(&self, data: Data, point: &Vec3) -> Data {
-        let x = point.x;
-        let y = point.y;
-        let z = point.z;
-        let z = self.map_range(z);
-        data.move_to((x, y))
-            .move_by((0, -z))
-            .line_by((-z, z))
-            .line_by((z, z))
-            .line_by((z, -z))
-            .line_by((-z, -z))
+    /// This is a scriber that uses points to construct `Data` to build a `Path` and add it to a `SVG` document. It draws
+    /// diamonds around the supplied points
+    fn scribe_points(&self, doc: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG {
+        let data = points.into_iter().fold(Data::new(), |d, &point| {
+            let (x, y, z) = (point.x, point.y, point.z);
+            let z = self.map_range(z);
+            d.move_to((x, y))
+                .move_by((0, -z))
+                .line_by((-z, z))
+                .line_by((z, z))
+                .line_by((z, -z))
+                .line_by((-z, -z))
+        });
+
+        let path = Path::new()
+            .set("fill", scriber.fill)
+            .set("stroke", scriber.stroke)
+            .set("stroke-width", scriber.stroke_width)
+            .set("d", data);
+        doc.add(path)
     }
 }
 
-//This could later on use different strategies to visualize a point
-//ie. perfect, arc, something else interesting
+pub struct CircleScriber {}
+
+impl HoloPointStrategy for CircleScriber {
+    /// This is a scriber that uses `Element`s (namely `Circle`s) and adds those directly to the `SVG` document.
+    /// It draws circles around each point, scaled by the z value. (Larger z = farther away = larger circle with flatter arc)
+    fn scribe_points(&self, mut doc: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG {
+        for point in points {
+            let (x, y, z) = (point.x, point.y, point.z);
+
+            // We scale the points by half the canvas size
+            let circle = Circle::new()
+                .set("cx", x * scriber.canvas_size.width as f32 * 0.5)
+                .set("cy", y * scriber.canvas_size.height as f32 * 0.5)
+                .set("r", z * scriber.canvas_size.width as f32 * 0.5)
+                .set("stroke-width", scriber.stroke_width)
+                .set("stroke", scriber.stroke)
+                .set("fill", scriber.fill);
+
+            doc = doc.add(circle);
+        }
+        doc
+    }
+}
+
+/// Different strategies to visualize a point
 pub trait HoloPointStrategy {
-    fn scribe_point(&self, data: Data, point: &Vec3) -> Data;
+    fn scribe_points(&self, doc: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG;
 }
 
 pub struct Scriber {
-    //Ammount to increase the document view in x/y beyond furthest away points
-    //This effects if some arcs are drawn outisde the work area
-    margin: Num,
     stroke: &'static str,
     stroke_width: Num,
+    fill: &'static str,
     point_scribing_strategy: Box<dyn HoloPointStrategy>,
+    canvas_size: CanvasSize,
+    margin: Num,
 }
 
-type Num = f32;
 
 impl Scriber {
-    pub fn new(point_scribing_strategy: impl HoloPointStrategy + 'static) -> Self {
+    pub fn new(
+        point_scribing_strategy: impl HoloPointStrategy + 'static,
+        canvas_size: CanvasSize,
+    ) -> Self {
         Self {
-            margin: 1.0,
             stroke: "black",
-            stroke_width: 0.05,
+            stroke_width: 0.5,
+            fill: "none",
             point_scribing_strategy: Box::new(point_scribing_strategy),
+            canvas_size: canvas_size,
+            margin: 1.0,
         }
     }
     /*
     Assumtions:
+    x, y, and z are between 0 and 1
     - x points right
     - y points up
     - z is positive out of the screen
     */
     pub fn scribe(&self, points: &Vec<Vec3>) -> svg::Document {
         let ((x_min, x_max), (y_min, y_max), _) = self.bounds(points);
-        let data = points.iter().fold(Data::new(), |d, p| {
-            self.point_scribing_strategy.scribe_point(d, p)
-        });
-        let data = data //add bounding box for now
+        let data = Data::new() //add bounding box for now
             .move_to((x_min, y_min))
             .line_to((x_min, y_max))
             .line_to((x_max, y_max))
             .line_to((x_max, y_min))
             .line_to((x_min, y_min));
         let path = Path::new()
-            .set("fill", "none")
-            .set("stroke", self.stroke)
+            .set("fill", self.fill)
+            .set("stroke", "red")
             .set("stroke-width", self.stroke_width)
             .set("d", data);
-        Document::new()
+
+        // Draw the bounding box
+        let doc = Document::new()
             .set("viewBox", (x_min, y_min, x_max - x_min, y_max - y_min))
-            .add(path)
+            .add(path);
+
+        // Scribe the points
+        self.point_scribing_strategy
+            .scribe_points(doc, points, &self)
     }
 
     //x, y and z point bounds + margins
@@ -99,7 +142,7 @@ impl Scriber {
             z_max = z_max.max(point.z);
         }
 
-        let m = self.margin;
+        let m = self.canvas_size.width as f32 + self.margin;
         (
             (x_min - m, x_max + m),
             (y_min - m, y_max + m),
