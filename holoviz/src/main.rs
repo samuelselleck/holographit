@@ -97,11 +97,13 @@ fn build_hologram(
             .set(
                 "stroke-width",
                 (extents.2 - extents.0) * CIRCLE_STROKE_WIDTH,
-            )
+            ) // TODO: Un-hard-code these values
             .set("stroke", "grey")
             .set("stroke-opacity", 0.5)
             .set("fill-opacity", 0);
         viewbox = viewbox.add(new_circle);
+        // TODO: Rearrange arcs/circles so that arcs are always on top of circles
+        // Make option for circles to not be drawn.
         let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &light_source)
             .set("stroke", "red")
             .set("stroke-width", (extents.2 - extents.0) * HOLO_STROKE_WIDTH);
