@@ -1,3 +1,4 @@
+use glam::Vec3;
 use svg::node::element::path::Data;
 use svg::node::element::Path;
 use svg::Document;
@@ -17,8 +18,10 @@ impl DebugScriber {
     }
 }
 impl HoloPointStrategy for DebugScriber {
-    fn scribe_point(&self, data: Data, point: &[Num; 3]) -> Data {
-        let &[x, y, z] = point;
+    fn scribe_point(&self, data: Data, point: &Vec3) -> Data {
+        let x = point.x;
+        let y = point.y;
+        let z = point.z;
         let z = self.map_range(z);
         data.move_to((x, y))
             .move_by((0, -z))
@@ -32,7 +35,7 @@ impl HoloPointStrategy for DebugScriber {
 //This could later on use different strategies to visualize a point
 //ie. perfect, arc, something else interesting
 pub trait HoloPointStrategy {
-    fn scribe_point(&self, data: Data, point: &[Num; 3]) -> Data;
+    fn scribe_point(&self, data: Data, point: &Vec3) -> Data;
 }
 
 pub struct Scriber {
@@ -61,7 +64,7 @@ impl Scriber {
     - y points up
     - z is positive out of the screen
     */
-    pub fn scribe(&self, points: &Vec<[Num; 3]>) -> svg::Document {
+    pub fn scribe(&self, points: &Vec<Vec3>) -> svg::Document {
         let ((x_min, x_max), (y_min, y_max), _) = self.bounds(points);
         let data = points.iter().fold(Data::new(), |d, p| {
             self.point_scribing_strategy.scribe_point(d, p)
@@ -83,17 +86,17 @@ impl Scriber {
     }
 
     //x, y and z point bounds + margins
-    fn bounds(&self, points: &Vec<[Num; 3]>) -> ((Num, Num), (Num, Num), (Num, Num)) {
+    fn bounds(&self, points: &Vec<Vec3>) -> ((Num, Num), (Num, Num), (Num, Num)) {
         let (mut x_min, mut y_min, mut z_min) = (Num::MAX, Num::MAX, Num::MAX);
         let (mut x_max, mut y_max, mut z_max) = (Num::MIN, Num::MIN, Num::MIN);
 
-        for &[x, y, z] in points {
-            x_min = x_min.min(x);
-            x_max = x_max.max(x);
-            y_min = y_min.min(y);
-            y_max = y_max.max(y);
-            z_min = z_min.min(z);
-            z_max = z_max.max(z);
+        for point in points {
+            x_min = x_min.min(point.x);
+            x_max = x_max.max(point.x);
+            y_min = y_min.min(point.y);
+            y_max = y_max.max(point.y);
+            z_min = z_min.min(point.z);
+            z_max = z_max.max(point.z);
         }
 
         let m = self.margin;
