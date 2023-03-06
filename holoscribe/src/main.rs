@@ -112,6 +112,12 @@ mod tests {
     use test::Bencher;
 
     #[bench]
+    fn benchmark_interpolate_points(b: &mut Bencher) {
+        let model = obj_from_file("tests/icosahedron.obj".to_string()).expect("invalid model");
+        b.iter(|| interpolate_edges(model.clone(), 100));
+    }
+
+    #[bench]
     fn benchmark_scribe(b: &mut Bencher) {
         let model = obj_from_file("tests/icosahedron.obj".to_string()).expect("invalid model");
         let interpolated_points = interpolate_edges(model, 100);
