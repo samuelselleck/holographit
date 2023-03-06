@@ -1,3 +1,4 @@
+#![feature(test)]
 //responsible for transforming point clouds/obj files to a holographic svg
 mod scriber;
 //cli accepts obj file and svg location (and optional parameters)
@@ -11,6 +12,8 @@ use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::error::Error;
 use std::f32::INFINITY;
+
+extern crate test;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
@@ -102,4 +105,24 @@ fn generate_csv(vertices: Vec<Vec3>) {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use crate::cli::CanvasSize;
+
+    use super::*;
+    use test::Bencher;
+
+    #[bench]
+    fn benchmark_scribe(b: &mut Bencher) {
+        let model = obj_from_file("tests/icosahedron.obj".to_string()).expect("invalid model");
+        let interpolated_points = interpolate_edges(model, 100);
+        let circle_strat = scriber::CircleScriber {};
+        let scriber = scriber::Scriber::new(
+            circle_strat,
+            CanvasSize {
+                width: 100,
+                height: 100,
+            },
+        );
+        b.iter(|| scriber.scribe(&interpolated_points));
+    }
+}
