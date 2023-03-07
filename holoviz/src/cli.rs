@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -6,7 +7,7 @@ use clap::Parser;
 pub struct Args {
     /// Input file: expects a .svg with circles
     // #[arg]
-    pub input_svg: String,
+    pub input_svg: PathBuf,
 
     /// Output file: expects .svg
     // #[arg]

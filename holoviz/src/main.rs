@@ -1,4 +1,6 @@
 #![feature(test)]
+use std::path::PathBuf;
+
 use svg::node::element::path::Data;
 use svg::node::element::{Circle, Path, Style, SVG};
 use svg::parser::Event;
@@ -30,7 +32,7 @@ fn main() {
     let args = cli::Args::parse();
 
     animate_hologram(
-        &args.input_svg,
+        args.input_svg,
         &args.output_svg,
         args.num_steps,
         args.lxmin,
@@ -52,7 +54,7 @@ fn main() {
 /// ls_min and ls_max are the minimum and maximum locations of the light
 /// source relative to the width of the canvas, respectively.
 fn animate_hologram(
-    input_file: &str,
+    input_file: PathBuf,
     output_handle: &str,
     num_steps: u32,
     ls_min: f32,
@@ -74,7 +76,8 @@ fn animate_hologram(
             false => width * ls_max - (image - num_steps) as f32 * step_size,
         };
         let ls = Point { x: lsx, y: -ly };
-        let filename = format!("{}{image:03}.svg", output_handle);
+        let mut filename: PathBuf = PathBuf::from(format!("{}{image:03}", output_handle));
+        filename.set_extension("svg");
         // TODO: Don't build holograms that we've already built when
         // reversing the animation!
         build_hologram(&input_circles, extents, &ls, filename)?;
@@ -91,7 +94,7 @@ fn build_hologram(
     circles: &Vec<Circle>,
     extents: (f32, f32, f32, f32),
     light_source: &Point,
-    filename: String,
+    filename: PathBuf,
 ) -> Result<(), std::io::Error> {
     let mut viewbox = SVG::new().set("viewBox", extents);
     let style = Style::new(include_str!("../style.css"));
@@ -100,14 +103,11 @@ fn build_hologram(
         let new_circle = circle.clone().set("class", "inputCircle").set(
             "stroke-width",
             (extents.2 - extents.0) * CIRCLE_STROKE_WIDTH,
-        ); // TODO: Un-hard-code these values
-           // .set("stroke-opacity", 0.5)
-           // .set("fill-opacity", 0);
+        );
         viewbox = viewbox.add(new_circle);
         // TODO: Rearrange arcs/circles so that arcs are always on top of circles
         // Make option for circles to not be drawn.
         let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &light_source)
-            // .set("stroke", "red")
             .set("class", "outputArc")
             .set("stroke-width", (extents.2 - extents.0) * HOLO_STROKE_WIDTH);
         viewbox = viewbox.add(svg_arc);
@@ -120,7 +120,7 @@ fn build_hologram(
     Ok(())
 }
 
-fn read_svg(filename: &str) -> Result<String, std::io::Error> {
+fn read_svg(filename: PathBuf) -> Result<String, std::io::Error> {
     let mut content = String::new();
     svg::open(filename, &mut content)?;
     Ok(content)
@@ -255,7 +255,8 @@ mod tests {
 
     #[bench]
     fn benchmark_build(b: &mut Bencher) {
-        let svg_contents = read_svg("tests/icosahedron.svg").expect("valid input file");
+        let svg_contents =
+            read_svg(PathBuf::from("tests/icosahedron.svg")).expect("valid input file");
         let input_circles = parse_svg_circles(&svg_contents);
         let extents = parse_viewbox_extents(&svg_contents);
         let width = extents.2 - extents.0;
@@ -268,7 +269,7 @@ mod tests {
                 &input_circles,
                 extents,
                 &ls,
-                "tests/benchmark_out.svg".to_string(),
+                PathBuf::from("tests/benchmark_out.svg"),
             )
         })
     }
