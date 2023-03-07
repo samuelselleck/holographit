@@ -1,8 +1,8 @@
 #![feature(test)]
 use std::path::PathBuf;
 
-use svg::node::element::path::Data;
-use svg::node::element::{Circle, Path, Style, SVG};
+use svg::node::element::path::{Command, Data};
+use svg::node::element::{Animate, Circle, Path, Style, SVG};
 use svg::parser::Event;
 use svg::Document;
 
@@ -31,10 +31,29 @@ struct Point {
 fn main() {
     let args = cli::Args::parse();
 
-    match animate_hologram(
+    // let input_file = PathBuf::from("circles.svg");
+    // let svg_contents = read_svg(input_file).unwrap();
+    // let input_circles = parse_svg_circles(&svg_contents);
+    // let style = Style::new(include_str!("../style.css"));
+
+    // let a = animated_arc(
+    //     &input_circles[1],
+    //     &Point { x: 150., y: -100. },
+    //     &Point { x: 250., y: -100. },
+    //     3.0,
+    //     // 5.0,
+    // );
+
+    // let atest = Document::new()
+    //     .add(style)
+    //     .add(a)
+    //     .set("width", DEFAULT_WIDTH)
+    //     .set("height", DEFAULT_HEIGHT);
+    // svg::save("atest.svg", &atest);
+    match animate_hologram_single_svg(
         args.input_svg,
-        &args.output_svg,
-        args.num_steps,
+        args.output_svg,
+        // args.num_steps,
         args.lxmin,
         args.lxmax,
         args.ly,
@@ -49,6 +68,51 @@ fn main() {
     // build_hologram(&input_circles, extents, &light_source, args.output_svg);
 }
 
+fn animate_hologram_single_svg(
+    input_file: PathBuf,
+    output_file: PathBuf,
+    // num_steps: u32,
+    ls_min: f32,
+    ls_max: f32,
+    ly: f32,
+) -> Result<(), std::io::Error> {
+    let svg_contents = read_svg(input_file)?;
+    let input_circles = parse_svg_circles(&svg_contents);
+    let extents = parse_viewbox_extents(&svg_contents);
+    let width = extents.2 - extents.0;
+    // let step_size = width * (ls_max - ls_min) / num_steps as f32;
+    let lss = Point {
+        x: width * ls_min,
+        y: -ly,
+    };
+    let lse = Point {
+        x: width * ls_max,
+        y: -ly,
+    };
+
+    let mut viewbox = SVG::new().set("viewBox", extents);
+    let style = Style::new(include_str!("../style.css"));
+    for circle in input_circles {
+        let new_circle = circle.clone().set("class", "inputCircle").set(
+            "stroke-width",
+            (extents.2 - extents.0) * CIRCLE_STROKE_WIDTH,
+        );
+        viewbox = viewbox.add(new_circle);
+        // TODO: Rearrange arcs/circles so that arcs are always on top of circles
+        // Make option for circles to not be drawn.
+        let svg_arc = animated_arc(&circle, &lss, &lse, 2.0)
+            .set("class", "outputArc")
+            .set("stroke-width", (extents.2 - extents.0) * HOLO_STROKE_WIDTH);
+        viewbox = viewbox.add(svg_arc);
+    }
+    let document = Document::new()
+        .set("width", DEFAULT_WIDTH)
+        .set("height", DEFAULT_HEIGHT)
+        .add(style)
+        .add(viewbox);
+    svg::save(output_file, &document)?;
+    Ok(())
+}
 /// Make an animated hologram based on curves in an input file.
 /// This function generates num_steps * 2 .svg files, which are intended
 /// to be stiched together into an animated .gif using a command such as
@@ -57,7 +121,7 @@ fn main() {
 ///
 /// ls_min and ls_max are the minimum and maximum locations of the light
 /// source relative to the width of the canvas, respectively.
-fn animate_hologram(
+fn animate_hologram_multi_svg(
     input_file: PathBuf,
     output_handle: &str,
     num_steps: u32,
@@ -130,6 +194,88 @@ fn read_svg(filename: PathBuf) -> Result<String, std::io::Error> {
     Ok(content)
 }
 
+fn data_to_string(data: &Data) -> String {
+    let mut result = String::new();
+    for command in data.iter() {
+        let params = match command {
+            Command::Move(_, params) => {
+                result.push('M');
+                params
+            }
+            Command::EllipticalArc(_, params) => {
+                result.push('A');
+                params
+            }
+            _ => unimplemented!(),
+        };
+        for param in params.iter() {
+            result = result + &format!("{} ", param);
+        }
+    }
+    result
+}
+fn animated_arc(
+    input_circle: &Circle,
+    light_source_start: &Point,
+    light_source_end: &Point,
+    duration_secs: f32,
+) -> Path {
+    assert!(duration_secs > 0f32);
+    let circle_attrs = input_circle.get_attributes();
+    let cx = circle_attrs["cx"]
+        .parse::<f32>()
+        .expect("Circle should have an x-coordinate");
+    let cy = circle_attrs["cy"]
+        .parse::<f32>()
+        .expect("Circle should have a y-coordinate");
+    let r = circle_attrs["r"]
+        .parse::<f32>()
+        .expect("Circle should have a radius");
+    let frame_1 = circular_arc_hologram_path(cx, cy, r, HOLO_WIDTH_DEG, light_source_start);
+    let frame_2 = circular_arc_hologram_path(cx, cy, r, HOLO_WIDTH_DEG, light_source_end);
+    let animation_data: String = [
+        data_to_string(&frame_1),
+        data_to_string(&frame_2),
+        data_to_string(&frame_1),
+    ]
+    .join(";");
+    let animated_arc = Path::new()
+        // .set("class", "outputArc")
+        // .set("stroke-width", stroke_width)
+        .add(
+            Animate::new()
+                .set("dur", duration_secs)
+                .set("repeatCount", "indefinite")
+                .set("attributeName", "d")
+                .set("values", animation_data),
+        );
+
+    animated_arc
+}
+
+fn circular_arc_hologram_path(
+    cx: f32,
+    cy: f32,
+    r: f32,
+    half_cone_angle: f32,
+    light_source: &Point,
+) -> Data {
+    let dx = light_source.x - cx;
+    let dy = light_source.y - cy;
+    let mut theta = (-dy / dx).atan();
+    if theta < 0f32 {
+        theta -= std::f32::consts::PI;
+    }
+    let x0 = cx + r * (theta - half_cone_angle.to_radians()).cos();
+    let y0 = cy - r * (theta - half_cone_angle.to_radians()).sin();
+    let x = cx + r * (theta + half_cone_angle.to_radians()).cos();
+    let y = cy - r * (theta + half_cone_angle.to_radians()).sin();
+    let path_data = Data::new()
+        .move_to((x0, y0))
+        .elliptical_arc_to((r, r, 0, 0, 0, x, y));
+
+    path_data
+}
 /// Given a circle, a light source, and a half-cone angle, return a Path
 /// that represents a circular arc about the point on the circle that is
 /// normal to the light source.
@@ -144,21 +290,10 @@ fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &P
     let r = circle_attrs["r"]
         .parse::<f32>()
         .expect("Circle should have a radius");
-    let dx = light_source.x - cx;
-    let dy = light_source.y - cy;
-    let mut theta = (-dy / dx).atan();
-    if theta < 0f32 {
-        theta -= std::f32::consts::PI;
-    }
-    let x0 = cx + r * (theta - half_cone_angle).to_radians().cos();
-    let y0 = cy - r * (theta - half_cone_angle).to_radians().sin();
-    let x = cx + r * (theta + half_cone_angle).to_radians().cos();
-    let y = cy - r * (theta + half_cone_angle).to_radians().sin();
-    let path_data = Data::new()
-        .move_to((x0, y0))
-        .elliptical_arc_to((r, r, 0, 0, 0, x, y));
-
-    Path::new().set("d", path_data)
+    Path::new().set(
+        "d",
+        circular_arc_hologram_path(cx, cy, r, half_cone_angle, light_source),
+    )
 }
 
 /// Given the contents of an SVG file, determine the extents of the drawing
@@ -172,7 +307,7 @@ fn parse_viewbox_extents(svg_contents: &String) -> (f32, f32, f32, f32) {
     let svg_tag = svg::Parser::new(&svg_contents)
         .next()
         .expect("empty svg file");
-    println!("{:?}", svg_tag);
+    // println!("{:?}", svg_tag);
     let extents: Vec<f32> = match svg_tag {
         Event::Tag("svg", _, attributes) => {
             if let Some(view_box) = attributes.get("viewBox") {

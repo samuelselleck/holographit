@@ -11,7 +11,7 @@ pub struct Args {
 
     /// Output file: expects .svg
     // #[arg]
-    pub output_svg: String,
+    pub output_svg: PathBuf,
 
     /// Y position of light source
     #[arg(default_value_t = 100.)]
