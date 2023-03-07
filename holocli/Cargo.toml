@@ -1,13 +1,13 @@
 [package]
-name = "holoscribe"
+name = "holocli"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-csv = "1.2.0"
-glam = "0.23.0"
-obj = "0.10.2"
+holoscribe = { path = "../holoscribe"}
+clap = { version = "4.1.6", features = ["derive"] }
+regex = "1"
 svg = "0.13.0"
-
+thiserror = "1.0.38"

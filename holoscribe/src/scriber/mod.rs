@@ -3,9 +3,8 @@ use svg::node::element::path::Data;
 use svg::node::element::{Circle, Path, SVG};
 use svg::Document;
 
-use crate::cli::CanvasSize;
-
 type Num = f32;
+
 pub struct DebugScriber {
     pub plane_start: Num,
     pub plane_end: Num,
@@ -55,9 +54,9 @@ impl HoloPointStrategy for CircleScriber {
 
             // We scale the points by half the canvas size
             let circle = Circle::new()
-                .set("cx", x * scriber.canvas_size.width as f32 * 0.5)
-                .set("cy", y * scriber.canvas_size.height as f32 * 0.5)
-                .set("r", z * scriber.canvas_size.width as f32 * 0.5)
+                .set("cx", x * scriber.canvas_size.0 as f32 * 0.5)
+                .set("cy", y * scriber.canvas_size.1 as f32 * 0.5)
+                .set("r", z * scriber.canvas_size.0 as f32 * 0.5)
                 .set("stroke-width", scriber.stroke_width)
                 .set("stroke", scriber.stroke)
                 .set("fill", scriber.fill);
@@ -78,7 +77,7 @@ pub struct Scriber {
     stroke_width: Num,
     fill: &'static str,
     point_scribing_strategy: Box<dyn HoloPointStrategy>,
-    canvas_size: CanvasSize,
+    canvas_size: (usize, usize),
     margin: Num,
 }
 
@@ -86,7 +85,7 @@ pub struct Scriber {
 impl Scriber {
     pub fn new(
         point_scribing_strategy: impl HoloPointStrategy + 'static,
-        canvas_size: CanvasSize,
+        canvas_size: (usize, usize),
     ) -> Self {
         Self {
             stroke: "black",
@@ -142,7 +141,7 @@ impl Scriber {
             z_max = z_max.max(point.z);
         }
 
-        let m = self.canvas_size.width as f32 + self.margin;
+        let m = self.canvas_size.0 as f32 + self.margin;
         (
             (x_min - m, x_max + m),
             (y_min - m, y_max + m),
