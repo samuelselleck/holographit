@@ -1,2 +1,4 @@
 */target
 */debug
+.DS_Store
+*/Cargo.lock
