@@ -102,7 +102,6 @@ fn build_hologram(
 ) -> Result<(), std::io::Error> {
     let mut viewbox = SVG::new().set("viewBox", extents);
     let style = Style::new(include_str!("../style.css"));
-    viewbox = viewbox.add(style);
     for circle in circles {
         let new_circle = circle.clone().set("class", "inputCircle").set(
             "stroke-width",
@@ -119,6 +118,7 @@ fn build_hologram(
     let document = Document::new()
         .set("width", DEFAULT_WIDTH)
         .set("height", DEFAULT_HEIGHT)
+        .add(style)
         .add(viewbox);
     svg::save(filename, &document)?;
     Ok(())
@@ -130,8 +130,9 @@ fn read_svg(filename: PathBuf) -> Result<String, std::io::Error> {
     Ok(content)
 }
 
-// TODO: Make this function simply return the incidence angle rather than passing
-// half_cone_angle through unmodified
+/// Given a circle, a light source, and a half-cone angle, return a Path
+/// that represents a circular arc about the point on the circle that is
+/// normal to the light source.
 fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &Point) -> Path {
     let circle_attrs = circle.get_attributes();
     let cx = circle_attrs["cx"]
@@ -140,18 +141,24 @@ fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &P
     let cy = circle_attrs["cy"]
         .parse::<f32>()
         .expect("Circle should have a y-coordinate");
-    // let r = circle_attrs["r"]
-    //     .parse::<f32>()
-    //     .expect("Circle should have a radius");
+    let r = circle_attrs["r"]
+        .parse::<f32>()
+        .expect("Circle should have a radius");
     let dx = light_source.x - cx;
     let dy = light_source.y - cy;
     let mut theta = (-dy / dx).atan();
     if theta < 0f32 {
-        //} std::f32::consts::PI {
         theta -= std::f32::consts::PI;
     }
+    let x0 = cx + r * (theta - half_cone_angle).to_radians().cos();
+    let y0 = cy - r * (theta - half_cone_angle).to_radians().sin();
+    let x = cx + r * (theta + half_cone_angle).to_radians().cos();
+    let y = cy - r * (theta + half_cone_angle).to_radians().sin();
+    let path_data = Data::new()
+        .move_to((x0, y0))
+        .elliptical_arc_to((r, r, 0, 0, 0, x, y));
 
-    circular_arc(circle, half_cone_angle, theta.to_degrees())
+    Path::new().set("d", path_data)
 }
 
 /// Given the contents of an SVG file, determine the extents of the drawing
@@ -223,33 +230,6 @@ fn parse_svg_circles(svg_contents: &String) -> Vec<Circle> {
         }
     }
     circles
-}
-
-/// Given a circle, a cone angle, and an incidence angle, return
-/// a SVGArc. The cone_angle represents the width of the arc in degrees;
-/// A cone angle of 360 will simply return a full circle.
-/// The incidence angle represents where on the circle the center
-/// of the arc will be. An angle of 0 deg is at +X (right of screen),
-/// 90 deg at +Y (top of screen) etc.
-fn circular_arc(circle: &Circle, half_cone_angle: f32, incidence_angle: f32) -> Path {
-    let circle_attrs = circle.get_attributes();
-    let cx = circle_attrs["cx"]
-        .parse::<f32>()
-        .expect("Circle should have an x-coordinate");
-    let cy = circle_attrs["cy"]
-        .parse::<f32>()
-        .expect("Circle should have a y-coordinate");
-    let r = circle_attrs["r"]
-        .parse::<f32>()
-        .expect("Circle should have a radius");
-    let x0 = cx + r * (incidence_angle - half_cone_angle).to_radians().cos();
-    let y0 = cy - r * (incidence_angle - half_cone_angle).to_radians().sin();
-    let x = cx + r * (incidence_angle + half_cone_angle).to_radians().cos();
-    let y = cy - r * (incidence_angle + half_cone_angle).to_radians().sin();
-    let path_data = Data::new()
-        .move_to((x0, y0))
-        .elliptical_arc_to((r, r, 0, 0, 0, x, y));
-    Path::new().set("d", path_data)
 }
 
 #[cfg(test)]
