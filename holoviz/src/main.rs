@@ -373,7 +373,7 @@ mod tests {
     use test::Bencher;
 
     #[bench]
-    fn benchmark_build(b: &mut Bencher) {
+    fn build_static_hologram(b: &mut Bencher) {
         let svg_contents =
             read_svg(PathBuf::from("tests/icosahedron.svg")).expect("valid input file");
         let input_circles = parse_svg_circles(&svg_contents);
@@ -389,6 +389,19 @@ mod tests {
                 extents,
                 &ls,
                 PathBuf::from("tests/benchmark_out.svg"),
+            )
+        })
+    }
+
+    #[bench]
+    fn build_animated_hologram(b: &mut Bencher) {
+        b.iter(|| {
+            animate_hologram_single_svg(
+                PathBuf::from("tests/icosahedron.svg"),
+                PathBuf::from("tests/benchmark_out.svg"),
+                0.35,
+                0.65,
+                100.0,
             )
         })
     }
