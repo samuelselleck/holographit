@@ -31,15 +31,19 @@ struct Point {
 fn main() {
     let args = cli::Args::parse();
 
-    animate_hologram(
+    match animate_hologram(
         args.input_svg,
         &args.output_svg,
         args.num_steps,
         args.lxmin,
         args.lxmax,
         args.ly,
-    )
-    .unwrap();
+    ) {
+        Ok(()) => {}
+        Err(err) => {
+            println!("ERROR: {err:?}")
+        }
+    }
     // After running this, run the following:
     // ffmpeg -f image2 -framerate 15 -i <output_svg>%03d.svg output.gif
     // build_hologram(&input_circles, extents, &light_source, args.output_svg);
@@ -61,7 +65,7 @@ fn animate_hologram(
     ls_max: f32,
     ly: f32,
 ) -> Result<(), std::io::Error> {
-    let svg_contents = read_svg(input_file).expect("valid input file");
+    let svg_contents = read_svg(input_file)?;
     let input_circles = parse_svg_circles(&svg_contents);
     let extents = parse_viewbox_extents(&svg_contents);
     let width = extents.2 - extents.0;
