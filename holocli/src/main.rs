@@ -1,13 +1,11 @@
 //responsible for transforming point clouds/obj files to a holographic svg
-mod scriber;
 //cli accepts obj file and svg location (and optional parameters)
 
 mod cli;
-mod model;
 
 use std::error::Error;
 
-use crate::model::ObjInterpolator;
+use holoscribe::{model::ObjInterpolator, scriber};
 use clap::Parser;
 use cli::Args;
 
@@ -17,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let interpolated_points = user_defined_model.interpolate_edges(args.stroke_density);
 
     let circle_strat = scriber::CircleScriber {};
-    let scriber = scriber::Scriber::new(circle_strat, args.canvas_size);
+    let scriber = scriber::Scriber::new(circle_strat, (args.canvas_size.width, args.canvas_size.height));
 
     let svg = scriber.scribe(&interpolated_points);
 
