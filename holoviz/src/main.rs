@@ -1,3 +1,4 @@
+#![feature(test)]
 use svg::node::element::path::Data;
 use svg::node::element::{Circle, Path, SVG};
 use svg::parser::Event;
@@ -5,6 +6,8 @@ use svg::Document;
 
 mod cli;
 use clap::Parser;
+
+extern crate test;
 
 // width of reflected hologram segments in degrees
 const HOLO_WIDTH_DEG: f32 = 3.5;
@@ -248,6 +251,27 @@ fn circular_arc(circle: &Circle, half_cone_angle: f32, incidence_angle: f32) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test::Bencher;
+
+    #[bench]
+    fn benchmark_build(b: &mut Bencher) {
+        let svg_contents = read_svg("tests/icosahedron.svg").expect("valid input file");
+        let input_circles = parse_svg_circles(&svg_contents);
+        let extents = parse_viewbox_extents(&svg_contents);
+        let width = extents.2 - extents.0;
+        let ls = Point {
+            x: width * 0.75,
+            y: -100.0,
+        };
+        b.iter(|| {
+            build_hologram(
+                &input_circles,
+                extents,
+                &ls,
+                "tests/benchmark_out.svg".to_string(),
+            )
+        })
+    }
 
     #[test]
     fn test_parse_extents() {
