@@ -2,6 +2,7 @@
 use std::path::PathBuf;
 
 use svg::node::element::path::{Command, Data};
+use svg::node::element::tag;
 use svg::node::element::{Animate, Circle, Path, Style, SVG};
 use svg::parser::Event;
 use svg::Document;
@@ -28,6 +29,20 @@ struct Point {
     y: f32,
 }
 
+/// SVG viewBox extents
+#[derive(PartialEq, Debug, Copy, Clone)]
+struct Extents {
+    xmin: f32,
+    ymin: f32,
+    xmax: f32,
+    ymax: f32,
+}
+
+impl Extents {
+    fn as_tuple(self) -> (f32, f32, f32, f32) {
+        (self.xmin, self.ymin, self.xmax, self.ymax)
+    }
+}
 fn main() {
     let args = cli::Args::parse();
 
@@ -77,9 +92,10 @@ fn animate_hologram_single_svg(
     ly: f32,
 ) -> Result<(), std::io::Error> {
     let svg_contents = read_svg(input_file)?;
-    let input_circles = parse_svg_circles(&svg_contents);
-    let extents = parse_viewbox_extents(&svg_contents);
-    let width = extents.2 - extents.0;
+    // let input_circles = parse_svg_circles(&svg_contents);
+    // let extents = parse_viewbox_extents(&svg_contents);
+    let (input_circles, extents) = parse_circles_with_extents(&svg_contents);
+    let width = extents.xmax - extents.xmin;
     // let step_size = width * (ls_max - ls_min) / num_steps as f32;
     let lss = Point {
         x: width * ls_min,
@@ -90,19 +106,19 @@ fn animate_hologram_single_svg(
         y: -ly,
     };
 
-    let mut viewbox = SVG::new().set("viewBox", extents);
+    let mut viewbox = SVG::new().set("viewBox", extents.clone().as_tuple());
     let style = Style::new(include_str!("../style.css"));
     for circle in input_circles {
-        let new_circle = circle.clone().set("class", "inputCircle").set(
-            "stroke-width",
-            (extents.2 - extents.0) * CIRCLE_STROKE_WIDTH,
-        );
+        let new_circle = circle
+            .clone()
+            .set("class", "inputCircle")
+            .set("stroke-width", (width) * CIRCLE_STROKE_WIDTH);
         viewbox = viewbox.add(new_circle);
         // TODO: Rearrange arcs/circles so that arcs are always on top of circles
         // Make option for circles to not be drawn.
         let svg_arc = animated_arc(&circle, &lss, &lse, 2.0)
             .set("class", "outputArc")
-            .set("stroke-width", (extents.2 - extents.0) * HOLO_STROKE_WIDTH);
+            .set("stroke-width", (width) * HOLO_STROKE_WIDTH);
         viewbox = viewbox.add(svg_arc);
     }
     let document = Document::new()
@@ -130,9 +146,10 @@ fn animate_hologram_multi_svg(
     ly: f32,
 ) -> Result<(), std::io::Error> {
     let svg_contents = read_svg(input_file)?;
-    let input_circles = parse_svg_circles(&svg_contents);
-    let extents = parse_viewbox_extents(&svg_contents);
-    let width = extents.2 - extents.0;
+    // let input_circles = parse_svg_circles(&svg_contents);
+    // let extents = parse_viewbox_extents(&svg_contents);
+    let (input_circles, extents) = parse_circles_with_extents(&svg_contents);
+    let width = extents.xmax - extents.xmin;
     let step_size = width * (ls_max - ls_min) / num_steps as f32;
     println!("Image has width of {width}, using step size of {step_size}");
     // TODO: update this part of the code so that num_steps is the
@@ -148,7 +165,7 @@ fn animate_hologram_multi_svg(
         filename.set_extension("svg");
         // TODO: Don't build holograms that we've already built when
         // reversing the animation!
-        build_hologram(&input_circles, extents, &ls, filename)?;
+        build_hologram(&input_circles, extents.as_tuple(), &ls, filename)?;
         // println!("{filename} - {}", ls.x)
     }
     Ok(())
@@ -296,6 +313,61 @@ fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &P
     )
 }
 
+fn parse_circles_with_extents(svg_contents: &String) -> (Vec<Circle>, Extents) {
+    let parser = svg::Parser::new(&svg_contents);
+    let mut circles = vec![];
+    let mut extents = Extents {
+        xmin: 0.,
+        ymin: 0.,
+        xmax: DEFAULT_WIDTH,
+        ymax: DEFAULT_HEIGHT,
+    };
+    for event in parser {
+        match event {
+            Event::Tag("svg", tag::Type::Start, attributes) => {
+                let extent_vec;
+                if let Some(view_box) = attributes.get("viewBox") {
+                    extent_vec = view_box
+                        .clone()
+                        .split(' ') // TODO: Handle svgs that use comma-separated values
+                        .map(|b| b.parse::<f32>().expect("invalid view bounds!"))
+                        .collect();
+                } else {
+                    let width = match attributes.get("width") {
+                        Some(w) => w.parse::<f32>().expect("invalid width!"),
+                        None => DEFAULT_WIDTH,
+                    };
+                    let height = match attributes.get("height") {
+                        Some(h) => h.parse::<f32>().expect("invalid height!"),
+                        None => DEFAULT_HEIGHT,
+                    };
+                    extent_vec = vec![0., 0., width, height];
+                }
+                extents = Extents {
+                    xmin: extent_vec[0],
+                    ymin: extent_vec[1],
+                    xmax: extent_vec[2],
+                    ymax: extent_vec[3],
+                };
+            }
+            Event::Tag("circle", _, attributes) => {
+                let new_circle = Circle::new()
+                    .set("cx", attributes["cx"].clone())
+                    .set("cy", attributes["cy"].clone())
+                    .set("r", attributes["r"].clone());
+                circles.push(new_circle);
+            }
+            Event::Tag("svg", tag::Type::End, _) => {
+                break;
+            }
+            _ => {
+                println!("Warning: Unknown SVG tag in input!");
+                continue;
+            }
+        }
+    }
+    (circles, extents)
+}
 /// Given the contents of an SVG file, determine the extents of the drawing
 /// to be used in lightsource application. Returns a 4-tuple of floats in the
 /// form (xmin, ymin, xmax, ymax). If the viewBox attribute has been set in the top-level
@@ -306,6 +378,7 @@ fn arc_from_light_source(circle: &Circle, half_cone_angle: f32, light_source: &P
 fn parse_viewbox_extents(svg_contents: &String) -> (f32, f32, f32, f32) {
     let svg_tag = svg::Parser::new(&svg_contents)
         .next()
+        // .nth(1)
         .expect("empty svg file");
     // println!("{:?}", svg_tag);
     let extents: Vec<f32> = match svg_tag {
@@ -404,6 +477,38 @@ mod tests {
                 100.0,
             )
         })
+    }
+
+    #[test]
+    fn test_parse_circles_extents() {
+        let svg_content = String::from(
+            r#"
+<svg height="500" width="500" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="-1.2759765 -1.2759765 2.551953 2.551953" xmlns="http://www.w3.org/2000/svg">
+<circle cx="0.850651" cy="0" fill="none" r="-0.13143276" stroke="black" stroke-width="0.005"/>
+</svg></svg>
+            "#,
+        );
+        let (circles, extents) = parse_circles_with_extents(&svg_content);
+        assert_eq!(
+            extents,
+            Extents {
+                xmin: -1.2759765,
+                ymin: -1.2759765,
+                xmax: 2.551953,
+                ymax: 2.551953
+            }
+        );
+        let expected_circle_attrs = circles[0].get_attributes();
+        assert_eq!(
+            expected_circle_attrs["cx"].parse::<f32>().unwrap(),
+            0.850651
+        );
+        assert_eq!(expected_circle_attrs["cy"].parse::<f32>().unwrap(), 0f32);
+        assert_eq!(
+            expected_circle_attrs["r"].parse::<f32>().unwrap(),
+            -0.13143276
+        );
     }
 
     #[test]
