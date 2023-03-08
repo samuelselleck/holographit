@@ -1,2 +1,6 @@
 *.gif
-tests/benchmark_out.svg
+*.odp
+*.svg
+*.vscode
+!tests/icosahedron.svg
+*.swp
