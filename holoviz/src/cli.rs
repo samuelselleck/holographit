@@ -28,4 +28,7 @@ pub struct Args {
     /// Maximum X position of light source as a fraction of canvas width
     #[arg(default_value_t = 0.65)]
     pub lxmax: f32,
+
+    #[arg(short, long)]
+    pub multi_svg: bool,
 }
