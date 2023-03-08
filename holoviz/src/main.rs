@@ -160,15 +160,15 @@ fn animate_hologram_multi_svg(
     let svg_contents = read_svg(input_file)?;
     let (input_circles, extents) = parse_circles_with_extents(&svg_contents);
     let width = extents.xmax - extents.xmin;
-    let step_size = width * (ls_max - ls_min) / num_steps as f32;
+    let step_size = DEFAULT_WIDTH_PX * (ls_max - ls_min) / num_steps as f32;
     println!("Image has width of {width}, using step size of {step_size}");
     // TODO: update this part of the code so that num_steps is the
     // _total_ number of frames. Currently returns 2X the number of frames
     // as the reversal is also computed
     for image in 0..num_steps * 2 {
         let lsx = match image < num_steps {
-            true => width * ls_min + image as f32 * step_size,
-            false => width * ls_max - (image - num_steps) as f32 * step_size,
+            true => DEFAULT_WIDTH_PX * ls_min + image as f32 * step_size,
+            false => DEFAULT_WIDTH_PX * ls_max - (image - num_steps) as f32 * step_size,
         };
         let ls = Point { x: lsx, y: -ly };
         let mut filename: PathBuf = PathBuf::from(format!(
@@ -521,18 +521,84 @@ mod tests {
         );
     }
 
+    /* "INTEGRATION TESTS" */
+
     #[test]
+    /// This tests an icosahedron with the viewbox extents defined at the
+    /// top level SVG. Generates multiple .svg files in the /tests folder
+    ///
+    /// After running this, run the following:
+    /// ```sh
+    /// ffmpeg -f image2 -framerate 15 -i icosahedron-%03d.svg output.gif
+    /// ```
+    /// Recommend manually examining the output to ensure correctness.
     fn test_icosahedron_multi() -> Result<(), std::io::Error> {
         let input_file = PathBuf::from("tests/icosahedron.svg");
-        let output_handle = PathBuf::from("tests/icosahedron");
+        let output_handle = PathBuf::from("tests/icosahedron-");
         animate_hologram_multi_svg(input_file, output_handle, 10, 0.35, 0.65, 100.0)?;
         Ok(())
     }
     #[test]
+    /// This tests an icosahedron with the viewbox extents defined at the
+    /// top level SVG. Generates single .svg file in the /tests folder.
+    /// Recommend manually examining the output to ensure correctness.
     fn test_icosahedron_single() -> Result<(), std::io::Error> {
         let input_file = PathBuf::from("tests/icosahedron.svg");
         let output_handle = PathBuf::from("tests/icosahedron-anim.svg");
         animate_hologram_single_svg(input_file, output_handle, 0.35, 0.65, 100.0)?;
+        Ok(())
+    }
+    #[test]
+    /// This tests an icosahedron with the viewbox extents defined at the
+    /// second level SVG, and all circles part of the interior viewbox.
+    /// Generates single .svg file in the /tests folder
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_nested_viewbox_single() -> Result<(), std::io::Error> {
+        let input_file = PathBuf::from("tests/test4.svg");
+        let output_handle = PathBuf::from("tests/test4-anim.svg");
+        animate_hologram_single_svg(input_file, output_handle, 0.35, 0.65, 100.0)?;
+        Ok(())
+    }
+    #[test]
+    /// This tests an icosahedron with the viewbox extents defined at the
+    /// second level SVG, and all circles part of the interior viewbox.
+    /// Generates mltiple .svg files in the /tests folder
+    ///
+    /// After running this, run the following:
+    /// ```sh
+    /// ffmpeg -f image2 -framerate 15 -i test4-%03d.svg output.gif
+    /// ```
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_nested_viewbox_multi() -> Result<(), std::io::Error> {
+        let input_file = PathBuf::from("tests/test4.svg");
+        let output_handle = PathBuf::from("tests/test4-");
+        animate_hologram_multi_svg(input_file, output_handle, 10, 0.35, 0.65, 100.0)?;
+        Ok(())
+    }
+    #[test]
+    /// This tests a simple rectangle. There is no viewBox definition
+    /// in the input file, only width and height.
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_no_viewbox_single() -> Result<(), std::io::Error> {
+        let input_file = PathBuf::from("tests/rectangle.svg");
+        let output_handle = PathBuf::from("tests/rect-anim.svg");
+        animate_hologram_single_svg(input_file, output_handle, 0.35, 0.65, 100.0)?;
+        Ok(())
+    }
+    #[test]
+    /// This tests a simple rectangle. There is no viewBox definition
+    /// in the input file, only width and height.
+    /// Generates mltiple .svg files in the /tests folder
+    ///
+    /// After running this, run the following:
+    /// ```sh
+    /// ffmpeg -f image2 -framerate 15 -i rect-%03d.svg output.gif
+    /// ```
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_no_viewbox_multi() -> Result<(), std::io::Error> {
+        let input_file = PathBuf::from("tests/rectangle.svg");
+        let output_handle = PathBuf::from("tests/rect-");
+        animate_hologram_multi_svg(input_file, output_handle, 10, 0.35, 0.65, 100.0)?;
         Ok(())
     }
 }

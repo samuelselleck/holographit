@@ -3,4 +3,6 @@
 *.svg
 *.vscode
 !tests/icosahedron.svg
+!tests/rectangle.svg
+!tests/test4.svg
 *.swp
