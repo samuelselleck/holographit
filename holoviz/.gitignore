@@ -1,2 +1,8 @@
 *.gif
-tests/benchmark_out.svg
+*.odp
+*.svg
+*.vscode
+!tests/icosahedron.svg
+!tests/rectangle.svg
+!tests/test4.svg
+*.swp

@@ -1,4 +1,9 @@
 */target
 */debug
+*.svg
+!assets/*.svg
+*.odp
+/.vscode
 .DS_Store
 */Cargo.lock
+

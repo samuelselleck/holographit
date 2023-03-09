@@ -1,0 +1,9 @@
+circle.inputCircle {
+    stroke: white;
+    fill-opacity: 0;
+}
+
+path.outputArc {
+    stroke: green;
+    fill-opacity: 0;
+}
