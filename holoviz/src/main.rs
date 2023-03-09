@@ -34,13 +34,13 @@ struct Point {
 struct Extents {
     xmin: f32,
     ymin: f32,
-    xmax: f32,
-    ymax: f32,
+    width: f32,
+    height: f32,
 }
 
 impl Extents {
     fn as_tuple(self) -> (f32, f32, f32, f32) {
-        (self.xmin, self.ymin, self.xmax, self.ymax)
+        (self.xmin, self.ymin, self.width, self.height)
     }
 
     fn from_vec(vec: Vec<f32>) -> Self {
@@ -48,8 +48,8 @@ impl Extents {
         Extents {
             xmin: vec[0],
             ymin: vec[1],
-            xmax: vec[2],
-            ymax: vec[3],
+            width: vec[2],
+            height: vec[3],
         }
     }
 }
@@ -100,7 +100,6 @@ fn animate_hologram_single_svg(
 ) -> Result<(), std::io::Error> {
     let svg_contents = read_svg(input_file)?;
     let (input_circles, extents) = parse_circles_with_extents(&svg_contents);
-    let width = extents.xmax - extents.xmin;
 
     let lss = Point {
         x: DEFAULT_WIDTH_PX * ls_min,
@@ -117,13 +116,13 @@ fn animate_hologram_single_svg(
         let new_circle = circle
             .clone()
             .set("class", "inputCircle")
-            .set("stroke-width", (width) * CIRCLE_STROKE_WIDTH);
+            .set("stroke-width", (extents.width) * CIRCLE_STROKE_WIDTH);
         viewbox = viewbox.add(new_circle);
         // TODO: Rearrange arcs/circles so that arcs are always on top of circles
         // Make option for circles to not be drawn.
         let svg_arc = animated_arc(&circle, &lss, &lse, 2.0)
             .set("class", "outputArc")
-            .set("stroke-width", (width) * HOLO_STROKE_WIDTH);
+            .set("stroke-width", (extents.width) * HOLO_STROKE_WIDTH);
         viewbox = viewbox.add(svg_arc);
     }
     let document = Document::new()
@@ -159,9 +158,11 @@ fn animate_hologram_multi_svg(
 ) -> Result<(), std::io::Error> {
     let svg_contents = read_svg(input_file)?;
     let (input_circles, extents) = parse_circles_with_extents(&svg_contents);
-    let width = extents.xmax - extents.xmin;
     let step_size = DEFAULT_WIDTH_PX * (ls_max - ls_min) / num_steps as f32;
-    println!("Image has width of {width}, using step size of {step_size}");
+    println!(
+        "Image has width of {}, using step size of {}",
+        &extents.width, step_size
+    );
     // TODO: update this part of the code so that num_steps is the
     // _total_ number of frames. Currently returns 2X the number of frames
     // as the reversal is also computed
@@ -354,8 +355,8 @@ fn parse_circles_with_extents(svg_contents: &String) -> (Vec<Circle>, Extents) {
     let mut extents = Extents {
         xmin: 0.,
         ymin: 0.,
-        xmax: DEFAULT_WIDTH_PX,
-        ymax: DEFAULT_HEIGHT_PX,
+        width: DEFAULT_WIDTH_PX,
+        height: DEFAULT_HEIGHT_PX,
     };
     // TODO: Handle empty or invalid SVG files
     for event in parser {
@@ -410,9 +411,8 @@ mod tests {
         let svg_contents =
             read_svg(PathBuf::from("tests/icosahedron.svg")).expect("valid input file");
         let (input_circles, extents) = parse_circles_with_extents(&svg_contents);
-        let width = extents.xmax - extents.xmin;
         let ls = Point {
-            x: width * 0.75,
+            x: extents.width * 0.75,
             y: -100.0,
         };
         b.iter(|| {
@@ -462,8 +462,8 @@ mod tests {
             Extents {
                 xmin: -1.2759765,
                 ymin: -1.2759765,
-                xmax: 2.551953,
-                ymax: 2.551953
+                width: 2.551953,
+                height: 2.551953
             }
         );
         let expected_circle_attrs = circles[0].get_attributes();
