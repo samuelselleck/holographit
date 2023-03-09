@@ -22,7 +22,7 @@ impl DebugScriber {
 impl HoloPointStrategy for DebugScriber {
     /// This is a scriber that uses points to construct `Data` to build a `Path` and add it to a `SVG` document. It draws
     /// diamonds around the supplied points
-    fn scribe_points(&self, doc: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG {
+    fn scribe_points(&self, viewbox: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG {
         let data = points.into_iter().fold(Data::new(), |d, &point| {
             let (x, y, z) = (point.x, point.y, point.z);
             let z = self.map_range(z);
@@ -39,37 +39,43 @@ impl HoloPointStrategy for DebugScriber {
             .set("stroke", scriber.stroke)
             .set("stroke-width", scriber.stroke_width)
             .set("d", data);
-        doc.add(path)
+        viewbox.add(path)
     }
 }
 
-pub struct CircleScriber {}
+pub struct CircleScriber {
+    z_scale_factor: f32,
+}
+
+impl CircleScriber {
+    pub fn new() -> Self {
+        CircleScriber { z_scale_factor: 0.25 }
+    }
+}
 
 impl HoloPointStrategy for CircleScriber {
-    /// This is a scriber that uses `Element`s (namely `Circle`s) and adds those directly to the `SVG` document.
+    /// This is a scriber that uses `Element`s (namely `Circle`s) and adds those directly to the `SVG` viewbox.
     /// It draws circles around each point, scaled by the z value. (Larger z = farther away = larger circle with flatter arc)
-    fn scribe_points(&self, mut doc: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG {
+    fn scribe_points(&self, mut viewbox: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG {
         for point in points {
             let (x, y, z) = (point.x, point.y, point.z);
-
-            // We scale the points by half the canvas size
             let circle = Circle::new()
-                .set("cx", x * scriber.canvas_size.0 as f32 * 0.5)
-                .set("cy", y * scriber.canvas_size.1 as f32 * 0.5)
-                .set("r", z * scriber.canvas_size.0 as f32 * 0.5)
+                .set("cx", x)
+                .set("cy", y)
+                .set("r", z * self.z_scale_factor as f32)
                 .set("stroke-width", scriber.stroke_width)
                 .set("stroke", scriber.stroke)
                 .set("fill", scriber.fill);
 
-            doc = doc.add(circle);
+            viewbox = viewbox.add(circle);
         }
-        doc
+        viewbox
     }
 }
 
 /// Different strategies to visualize a point
 pub trait HoloPointStrategy {
-    fn scribe_points(&self, doc: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG;
+    fn scribe_points(&self, viewbox: SVG, points: &Vec<Vec3>, scriber: &Scriber) -> SVG;
 }
 
 pub struct Scriber {
@@ -78,7 +84,7 @@ pub struct Scriber {
     fill: &'static str,
     point_scribing_strategy: Box<dyn HoloPointStrategy>,
     canvas_size: (usize, usize),
-    margin: Num,
+    margin_percentage: Num,
 }
 
 
@@ -89,63 +95,62 @@ impl Scriber {
     ) -> Self {
         Self {
             stroke: "black",
-            stroke_width: 0.5,
+            stroke_width: 0.005,
             fill: "none",
             point_scribing_strategy: Box::new(point_scribing_strategy),
             canvas_size: canvas_size,
-            margin: 1.0,
+            margin_percentage: 0.25,
         }
     }
     /*
     Assumtions:
-    x, y, and z are between 0 and 1
     - x points right
     - y points up
     - z is positive out of the screen
     */
     pub fn scribe(&self, points: &Vec<Vec3>) -> svg::Document {
-        let ((x_min, x_max), (y_min, y_max), _) = self.bounds(points);
-        let data = Data::new() //add bounding box for now
-            .move_to((x_min, y_min))
-            .line_to((x_min, y_max))
-            .line_to((x_max, y_max))
-            .line_to((x_max, y_min))
-            .line_to((x_min, y_min));
-        let path = Path::new()
-            .set("fill", self.fill)
-            .set("stroke", "red")
-            .set("stroke-width", self.stroke_width)
-            .set("d", data);
-
-        // Draw the bounding box
+        // Set the size of the containing document based on the canvas size supplied by the user
         let doc = Document::new()
-            .set("viewBox", (x_min, y_min, x_max - x_min, y_max - y_min))
-            .add(path);
+            .set("width", self.canvas_size.0)
+            .set("height", self.canvas_size.1);
 
-        // Scribe the points
-        self.point_scribing_strategy
-            .scribe_points(doc, points, &self)
+        // Build a viewbox specified by the upper and lower bounds of the coordinates of the point set, plus
+        // some margin
+        let (x_min, y_min, width, height) = self.find_extent(points);
+        let mut viewbox = SVG::new().set("viewBox", (x_min,y_min, width, height));
+
+        // Scribe the points into the viewbox we just made
+        viewbox = self.point_scribing_strategy
+            .scribe_points(viewbox, points, &self);
+        doc.add(viewbox)
     }
 
-    //x, y and z point bounds + margins
-    fn bounds(&self, points: &Vec<Vec3>) -> ((Num, Num), (Num, Num), (Num, Num)) {
-        let (mut x_min, mut y_min, mut z_min) = (Num::MAX, Num::MAX, Num::MAX);
-        let (mut x_max, mut y_max, mut z_max) = (Num::MIN, Num::MIN, Num::MIN);
+    /// Returns (min_x, min_y, width, height) of the point set.
+    /// The values are adjusted using a percentage of the raw width and height as determined by the margin
+    fn find_extent(&self, points: &Vec<Vec3>) -> (Num, Num, Num, Num) {
+        let (mut x_min, mut y_min) = (Num::MAX, Num::MAX);
+        let (mut x_max, mut y_max) = (Num::MIN, Num::MIN);
 
         for point in points {
             x_min = x_min.min(point.x);
             x_max = x_max.max(point.x);
             y_min = y_min.min(point.y);
             y_max = y_max.max(point.y);
-            z_min = z_min.min(point.z);
-            z_max = z_max.max(point.z);
         }
 
-        let m = self.canvas_size.0 as f32 + self.margin;
-        (
-            (x_min - m, x_max + m),
-            (y_min - m, y_max + m),
-            (z_min - m, z_max + m),
-        )
+        // The extact width and height: distance between the largest and smallest points
+        let (raw_width, raw_height) = (x_max - x_min, y_max - y_min);
+
+        // The margins we want to extend the max and min values by - calculated as a percentage of the raw width and height
+        let (width_margin, height_margin) = (self.margin_percentage * raw_width, self.margin_percentage * raw_height);
+
+        // Extend the min and max values
+        x_min -= width_margin;
+        y_min -= height_margin;
+        x_max += width_margin;
+        y_max += height_margin;
+
+        // Return the min values and the new distances for width and height
+        (x_min, y_min, (x_max - x_min), (y_max - y_min))
     }
 }
