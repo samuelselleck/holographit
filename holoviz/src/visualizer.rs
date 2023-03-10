@@ -7,7 +7,6 @@ use svg::parser::Event;
 use svg::Document;
 
 extern crate test;
-
 // width of reflected hologram segments in degrees
 const HOLO_WIDTH_DEG: f32 = 3.5;
 
@@ -20,11 +19,9 @@ const DEFAULT_HEIGHT_PX: f32 = 500.;
 const HOLO_STROKE_WIDTH: f32 = 0.005;
 const CIRCLE_STROKE_WIDTH: f32 = 0.0001;
 
-const DEFAULT_SYTLESHEET: &str = "../style.css";
-
 pub struct Point {
-    x: f32,
-    y: f32,
+    pub x: f32,
+    pub y: f32,
 }
 
 /// SVG viewBox extents
@@ -36,7 +33,6 @@ pub struct Extents {
     pub height: f32,
 }
 pub struct Visualizer {
-    // svg_contents: String,
     input_circles: Vec<Circle>,
     extents: Extents,
     light_source: Point,
@@ -46,6 +42,10 @@ pub struct Visualizer {
 }
 
 impl Visualizer {
+    /// Build a visualizer from a string representing the
+    /// contents of an SVG file. Automatically parses the input circles
+    /// and extents of the input SVG. Adds a static light source
+    /// and a stylesheet.
     pub fn from_svg_contents(contents: String) -> Self {
         let (input_circles, extents) = parse_circles_with_extents(&contents);
         let light_source = Point {
@@ -63,16 +63,22 @@ impl Visualizer {
             holo_stroke_width: HOLO_STROKE_WIDTH,
         }
     }
+
+    // Build a visualizer from an SVG input file
     pub fn from_file(file_path: PathBuf) -> Result<Self, std::io::Error> {
         let mut content = String::new();
         svg::open(file_path, &mut content)?;
         Ok(Self::from_svg_contents(content))
     }
 
-    /// Given one or more circles in an SVG file, the extents of the
-    /// viewBox in the input file and a lightsource, make a new SVG
-    /// called filename that has the input circles in light grey, and the
-    /// reflected portions highlighted in red.
+    /// Build a static hologram from the visualizer
+    /// ```
+    /// let input_file = PathBuf::from("input_circles.svg")
+    /// let viz = Visualizer::from_file(input_file)?;
+    /// let hologram = viz.build_static_hologram();
+    /// let output_file = PathBuf::from("output_static.svg");
+    /// svg::save(output_file, &hologram)?;
+    /// ```
     pub fn build_static_hologram(&self) -> Document {
         let mut viewbox = SVG::new().set("viewBox", self.extents.as_tuple());
         for circle in &self.input_circles {
@@ -85,15 +91,58 @@ impl Visualizer {
             // Make option for circles to not be drawn.
             let svg_arc = arc_from_light_source(&circle, HOLO_WIDTH_DEG, &self.light_source)
                 .set("class", "outputArc")
-                .set("stroke-width", (self.extents.width) * HOLO_STROKE_WIDTH);
+                .set(
+                    "stroke-width",
+                    (self.extents.width) * self.holo_stroke_width,
+                );
             viewbox = viewbox.add(svg_arc);
         }
-        let document = Document::new()
+        Document::new()
             .set("width", DEFAULT_WIDTH_PX)
             .set("height", DEFAULT_HEIGHT_PX)
             .add(self.style.clone())
-            .add(viewbox);
-        document
+            .add(viewbox)
+    }
+
+    /// Build an animated hologram from the visualizer. Requires starting
+    /// and ending positions of light source relative to the canvas. The
+    /// animation will loop back & forth from one light source to the other
+    /// indefinitely, with the supplied duration.
+    /// ```
+    /// let input_file = PathBuf::from("input_circles.svg")
+    /// let viz = Visualizer::from_file(input_file)?;
+    /// let ls_start = Point { x: 300., y: -100. };
+    /// let ls_end = Point { x: 400., y: -50. };
+    /// let duration_secs = 2.0;
+    /// let hologram = viz.build_animated_hologram(&ls_start, &ls_end, duration_secs);
+    /// let output_file = PathBuf::from("output_animated.svg");
+    /// svg::save(output_file, &hologram)?;
+    /// ```
+    pub fn build_animated_hologram(
+        &self,
+        ls_start: &Point,
+        ls_end: &Point,
+        duration_secs: f32, // TODO: Input validation, ensure positive number
+    ) -> Document {
+        let mut viewbox = SVG::new().set("viewBox", self.extents.clone().as_tuple());
+        for circle in &self.input_circles {
+            let new_circle = circle
+                .clone()
+                .set("class", "inputCircle")
+                .set("stroke-width", (self.extents.width) * CIRCLE_STROKE_WIDTH);
+            viewbox = viewbox.add(new_circle);
+            // TODO: Rearrange arcs/circles so that arcs are always on top of circles
+            // Make option for circles to not be drawn.
+            let svg_arc = animated_arc(&circle, &ls_start, &ls_end, duration_secs)
+                .set("class", "outputArc")
+                .set("stroke-width", (self.extents.width) * HOLO_STROKE_WIDTH);
+            viewbox = viewbox.add(svg_arc);
+        }
+        Document::new()
+            .set("width", DEFAULT_WIDTH_PX)
+            .set("height", DEFAULT_HEIGHT_PX)
+            .add(self.style.clone())
+            .add(viewbox)
     }
 }
 
@@ -213,4 +262,248 @@ fn circular_arc_hologram_path(
         .elliptical_arc_to((r, r, 0, 0, 0, x, y));
 
     path_data
+}
+
+/*
+*/
+
+/// Given path data in the form of commands, return a string
+/// as would be represented in a rendered SVG file.
+/// ```
+/// let data = Data::new()
+///     .move_to((0, 0))
+///     .elliptical_arc_to((80, 80, 0, 0, 0, 10, 10));
+/// assert_eq!(data_to_string(&data), "M0 0 A80 80 0 0 0 10 10")
+/// ```
+/// This function only works for data with Move and Elliptical Arc commands.
+/// Any other commands in the path data will cause an unimplemented! failure.
+fn data_to_string(data: &Data) -> String {
+    let mut result = String::new();
+    for command in data.iter() {
+        let params = match command {
+            Command::Move(_, params) => {
+                result.push('M');
+                params
+            }
+            Command::EllipticalArc(_, params) => {
+                result.push('A');
+                params
+            }
+            _ => unimplemented!(),
+        };
+        for param in params.iter() {
+            result = result + &format!("{} ", param);
+        }
+    }
+    result.trim().to_string()
+}
+
+/// Given an input circle and starting & ending positions for a light
+/// source, return a Path object with an animated SVG arc representing
+/// a hologram of the light moving back and forth between the two
+/// points. Animation has `duration_secs` and will repeat indefinitely.
+///
+/// TODO: Refactor this to calculate the appropriate number of steps
+/// to animate. Current animation only uses start & end positions of light
+/// source. A cleaner animation will result from taking intermediate
+/// points if the movement of the light source is large.
+fn animated_arc(
+    input_circle: &Circle,
+    light_source_start: &Point,
+    light_source_end: &Point,
+    duration_secs: f32,
+) -> Path {
+    assert!(duration_secs > 0f32);
+    let circle_attrs = input_circle.get_attributes();
+    let cx = circle_attrs["cx"]
+        .parse::<f32>()
+        .expect("Circle should have an x-coordinate");
+    let cy = circle_attrs["cy"]
+        .parse::<f32>()
+        .expect("Circle should have a y-coordinate");
+    let r = circle_attrs["r"]
+        .parse::<f32>()
+        .expect("Circle should have a radius");
+    let frame_start = circular_arc_hologram_path(cx, cy, r, HOLO_WIDTH_DEG, light_source_start);
+    let frame_end = circular_arc_hologram_path(cx, cy, r, HOLO_WIDTH_DEG, light_source_end);
+    let animation_data: String = [
+        data_to_string(&frame_start),
+        data_to_string(&frame_end),
+        data_to_string(&frame_start),
+    ]
+    .join(";");
+    let animated_arc = Path::new().add(
+        Animate::new()
+            .set("dur", duration_secs)
+            .set("repeatCount", "indefinite")
+            .set("attributeName", "d")
+            .set("values", animation_data),
+    );
+
+    animated_arc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test::Bencher;
+
+    #[bench]
+    fn build_static_hologram(b: &mut Bencher) {
+        let viz = Visualizer::from_file(PathBuf::from("tests/icosahedron.svg"))
+            .expect("valid input file");
+        b.iter(|| {
+            viz.build_static_hologram();
+        })
+    }
+
+    #[bench]
+    fn build_animated_hologram(b: &mut Bencher) {
+        let viz = Visualizer::from_file(PathBuf::from("tests/icosahedron.svg"))
+            .expect("valid input file");
+        let ls_start = Point { x: 300., y: -100. };
+        let ls_end = Point { x: 400., y: -10. };
+        let duration_secs = 2.0;
+        b.iter(|| {
+            viz.build_animated_hologram(&ls_start, &ls_end, duration_secs);
+        })
+    }
+    #[test]
+    fn test_data_to_string() {
+        let data = Data::new()
+            .move_to((0, 0))
+            .elliptical_arc_to((80, 80, 0, 0, 0, 10, 10));
+        assert_eq!(data_to_string(&data), "M0 0 A80 80 0 0 0 10 10")
+    }
+
+    #[test]
+    fn test_parse_circles_extents() {
+        let svg_content = String::from(
+            r#"
+<svg height="500" width="500" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="-1.2759765,-1.2759765 2.551953,2.551953" xmlns="http://www.w3.org/2000/svg">
+<circle cx="0.850651" cy="0" fill="none" r="-0.13143276" stroke="black" stroke-width="0.005"/>
+</svg></svg>
+            "#,
+        );
+        let (circles, extents) = parse_circles_with_extents(&svg_content);
+        assert_eq!(
+            extents,
+            Extents {
+                xmin: -1.2759765,
+                ymin: -1.2759765,
+                width: 2.551953,
+                height: 2.551953
+            }
+        );
+        let expected_circle_attrs = circles[0].get_attributes();
+        assert_eq!(
+            expected_circle_attrs["cx"].parse::<f32>().unwrap(),
+            0.850651
+        );
+        assert_eq!(expected_circle_attrs["cy"].parse::<f32>().unwrap(), 0f32);
+        assert_eq!(
+            expected_circle_attrs["r"].parse::<f32>().unwrap(),
+            -0.13143276
+        );
+    }
+
+    #[test]
+    fn test_parse_extents() {
+        let svg_with_viewbox = String::from(
+            r#"
+<svg
+  height="100" width="30"
+  viewBox="-10 -20 300 100"
+  xmlns="http://www.w3.org/2000/svg"
+  stroke="red"
+  fill="grey">
+  <circle cx="50" cy="50" r="40" />
+</svg>
+        "#,
+        );
+        assert_eq!(
+            parse_circles_with_extents(&svg_with_viewbox).1.as_tuple(),
+            (-10., -20., 300., 100.)
+        );
+        let svg_without_viewbox = String::from(
+            r#"
+<svg
+  height="100" width="30"
+  xmlns="http://www.w3.org/2000/svg"
+  fill="grey">
+  <circle cx="50" cy="50" r="40" />
+</svg>
+        "#,
+        );
+        assert_eq!(
+            parse_circles_with_extents(&svg_without_viewbox)
+                .1
+                .as_tuple(),
+            (0., 0., 30., 100.)
+        );
+        assert_eq!(
+            // empty SVG should still get a result
+            parse_circles_with_extents(&String::from("<svg/>"))
+                .1
+                .as_tuple(),
+            (0., 0., DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX)
+        );
+    }
+
+    /* "INTEGRATION TESTS" */
+    fn integration_test(input_path: PathBuf, output_path: PathBuf) -> Result<(), std::io::Error> {
+        let viz = Visualizer::from_file(input_path)?;
+        let ls_start = Point { x: 300., y: -100. };
+        let ls_end = Point { x: 400., y: -50. };
+        let duration_secs = 2.0;
+        let hologram = viz.build_animated_hologram(&ls_start, &ls_end, duration_secs);
+        svg::save(output_path, &hologram).unwrap();
+
+        Ok(())
+    }
+    #[test]
+    /// This test catches an error where the y-coordinate of one of the
+    /// light sources is too large, causing two halves of the images to
+    /// rotate in different directions.
+    fn icosahedron_graphics_error() -> Result<(), std::io::Error> {
+        let viz = Visualizer::from_file(PathBuf::from("tests/icosahedron.svg"))?;
+        let ls_start = Point { x: 300., y: -100. };
+        let ls_end = Point { x: 400., y: 0. };
+        let duration_secs = 2.0;
+        let hologram = viz.build_animated_hologram(&ls_start, &ls_end, duration_secs);
+        svg::save(PathBuf::from("tests/icosahedron-error.svg"), &hologram).unwrap();
+        Ok(())
+    }
+    #[test]
+    /// This tests an icosahedron with the viewbox extents defined at the
+    /// top level SVG. Generates single .svg file in the /tests folder.
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_icosahedron_single() -> Result<(), std::io::Error> {
+        let input_path = PathBuf::from("tests/icosahedron.svg");
+        let output_path = PathBuf::from("tests/icosahedron-anim.svg");
+        integration_test(input_path, output_path)?;
+        Ok(())
+    }
+    #[test]
+    /// This tests an icosahedron with the viewbox extents defined at the
+    /// second level SVG, and all circles part of the interior viewbox.
+    /// Generates single .svg file in the /tests folder
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_nested_viewbox_single() -> Result<(), std::io::Error> {
+        let input_path = PathBuf::from("tests/test4.svg");
+        let output_path = PathBuf::from("tests/test4-anim.svg");
+        integration_test(input_path, output_path)?;
+        Ok(())
+    }
+    #[test]
+    /// This tests a simple rectangle. There is no viewBox definition
+    /// in the input file, only width and height.
+    /// Recommend manually examining the output to ensure correctness.
+    fn test_no_viewbox_single() -> Result<(), std::io::Error> {
+        let input_path = PathBuf::from("tests/rectangle.svg");
+        let output_path = PathBuf::from("tests/rect-anim.svg");
+        integration_test(input_path, output_path)?;
+        Ok(())
+    }
 }
