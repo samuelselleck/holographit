@@ -1,3 +1,4 @@
+#![feature(test)]
 use std::path::PathBuf;
 
 use svg::node::element::path::{Command, Data};
@@ -72,12 +73,16 @@ impl Visualizer {
     }
 
     /// Build a static hologram from the visualizer
-    /// ```
-    /// let input_file = PathBuf::from("input_circles.svg")
-    /// let viz = Visualizer::from_file(input_file)?;
+    /// ```no_run
+    /// # use std::io;
+    /// use std::path::PathBuf;
+    /// use holoviz::Visualizer;
+    /// let input_file = PathBuf::from("input_circles.svg");
+    /// let viz = Visualizer::from_file(input_file).unwrap();
     /// let hologram = viz.build_static_hologram();
     /// let output_file = PathBuf::from("output_static.svg");
-    /// svg::save(output_file, &hologram)?;
+    /// svg::save(output_file, &hologram).unwrap();
+    /// # Ok::<(), io::Error>(())
     /// ```
     pub fn build_static_hologram(&self) -> Document {
         let mut viewbox = SVG::new().set("viewBox", self.extents.as_tuple());
@@ -108,8 +113,11 @@ impl Visualizer {
     /// and ending positions of light source relative to the canvas. The
     /// animation will loop back & forth from one light source to the other
     /// indefinitely, with the supplied duration.
-    /// ```
-    /// let input_file = PathBuf::from("input_circles.svg")
+    /// ```no_run
+    /// # use std::io;
+    /// use std::path::PathBuf;
+    /// use holoviz::{Visualizer, Point};
+    /// let input_file = PathBuf::from("input_circles.svg");
     /// let viz = Visualizer::from_file(input_file)?;
     /// let ls_start = Point { x: 300., y: -100. };
     /// let ls_end = Point { x: 400., y: -50. };
@@ -117,6 +125,7 @@ impl Visualizer {
     /// let hologram = viz.build_animated_hologram(&ls_start, &ls_end, duration_secs);
     /// let output_file = PathBuf::from("output_animated.svg");
     /// svg::save(output_file, &hologram)?;
+    /// # Ok::<(), io::Error>(())
     /// ```
     pub fn build_animated_hologram(
         &self,
@@ -269,11 +278,12 @@ fn circular_arc_hologram_path(
 
 /// Given path data in the form of commands, return a string
 /// as would be represented in a rendered SVG file.
-/// ```
+/// ```ignore
+/// use svg::node::element::path::Data;
 /// let data = Data::new()
 ///     .move_to((0, 0))
 ///     .elliptical_arc_to((80, 80, 0, 0, 0, 10, 10));
-/// assert_eq!(data_to_string(&data), "M0 0 A80 80 0 0 0 10 10")
+/// assert_eq!(data_to_string(&data), "M0 0 A80 80 0 0 0 10 10");
 /// ```
 /// This function only works for data with Move and Elliptical Arc commands.
 /// Any other commands in the path data will cause an unimplemented! failure.
