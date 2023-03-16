@@ -11,3 +11,4 @@ actix-web = "4.3.1"
 holoscribe = {path="../holoscribe"}
 holoviz = {path="../holoviz"}
 svg = "0.13.0"
+serde = { version = "1", features=["derive"]}
