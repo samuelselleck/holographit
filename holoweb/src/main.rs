@@ -7,7 +7,9 @@ use serde::Deserialize;
 
 use actix_files as fs;
 use holoscribe::{model::ObjInterpolator, scriber};
+// use holoviz::Visualizer;
 use std::path::PathBuf;
+use std::str;
 
 #[derive(Debug, Deserialize)]
 struct ScribeParameters {
@@ -72,6 +74,8 @@ async fn echo(req_body: String) -> impl Responder {
 
 #[post("/scriber")]
 async fn get_scriber(form: web::Form<ScribeParameters>) -> impl Responder {
+    // TODO: Input validation!
+
     // println!("Got {:?}", form);
     let model_path = PathBuf::from("../holoscribe/tests/icosahedron.obj");
     let model = ObjInterpolator::from_file(model_path.to_str().unwrap().to_string())
@@ -81,6 +85,16 @@ async fn get_scriber(form: web::Form<ScribeParameters>) -> impl Responder {
     let canvas_size = (form.width_mm, form.height_mm);
     let scriber = scriber::Scriber::new(circle_strat, canvas_size);
     let svg = scriber.scribe(&interpolated_points);
+
+    // TODO: Skip writing to a buffer and just pass along the
+    // SVG document instead.
+    let buf = Vec::<u8>::new();
+    svg::write(buf.clone(), &svg).expect("Error writing SVG");
+    let contents = str::from_utf8(&buf);
+
+    // TODO: Fix viz library so that this import will work.
+    // let viz = Vizualizer::from_svg_contents(svg);
+
     // TODO: Rather than save a temporary file on the server, just serve
     // the SVG code directly on the webpage
     svg::save("temp/cube.svg", &svg).expect("Error saving SVG");
