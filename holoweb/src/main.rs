@@ -9,7 +9,6 @@ use tera::{self, Context, Tera};
 use actix_files as fs;
 use holoscribe::{model::ObjInterpolator, scriber};
 use holoviz::Visualizer;
-use std::fs as stdfs;
 use std::path::PathBuf;
 use std::str;
 
@@ -26,10 +25,6 @@ struct VisParameters {
     duration_s: f32,
 }
 
-// impl FromRequest for ScribeParameters {
-//     fn from
-// }
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("HOLO, world!");
@@ -38,16 +33,9 @@ async fn main() -> std::io::Result<()> {
         App::new() // TODO: Better way to structure this?
             .service(get_index)
             .service(get_static)
-            // .route("/scriber", web::get().to(get_scriber))
             .service(get_visualizer)
     });
-    // server.route("/", web::get().to(get_index));
-    server
-        .bind("127.0.0.1:5000")?
-        // .expect("Error binding server!")
-        .run()
-        .await
-    // .unwrap(); // TODO: Make main return a Result
+    server.bind("127.0.0.1:5000")?.run().await
 }
 
 #[get("/temp/{filename:.*}")]
@@ -129,11 +117,11 @@ async fn get_visualizer(form: web::Form<VisParameters>) -> impl Responder {
 
 #[get("/")]
 async fn get_index() -> HttpResponse {
-    // TODO: Have this pull in HTML code from outside of the code
     let index = render_template().expect("Error rendering template");
     let resp = HttpResponse::Ok().content_type("text/html").body(index);
     resp
 }
+
 fn render_template() -> Result<String, tera::Error> {
     let obj_dir = PathBuf::from("static");
     let tera = match Tera::new("templates/*.html") {
@@ -153,10 +141,11 @@ fn render_template() -> Result<String, tera::Error> {
 
 fn list_obj_files(directory: PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::<PathBuf>::new();
-    for file in stdfs::read_dir(directory)? {
+    for file in std::fs::read_dir(directory)? {
         if let Some(entry) = file.ok() {
-            // println!("found {:?}", entry.path());
-            files.push(entry.path());
+            if entry.path().extension().unwrap() == "obj" {
+                files.push(entry.path());
+            }
         }
     }
     Ok(files)
