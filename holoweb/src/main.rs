@@ -4,15 +4,18 @@ use actix_web::{
     post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 use serde::Deserialize;
+use tera::{self, Context, Tera};
 
 use actix_files as fs;
 use holoscribe::{model::ObjInterpolator, scriber};
 use holoviz::Visualizer;
+use std::fs as stdfs;
 use std::path::PathBuf;
 use std::str;
 
 #[derive(Debug, Deserialize)]
 struct VisParameters {
+    model_file: PathBuf,
     width_mm: usize,
     height_mm: usize,
     stroke_density: usize,
@@ -37,7 +40,6 @@ async fn main() -> std::io::Result<()> {
             .service(get_static)
             // .route("/scriber", web::get().to(get_scriber))
             .service(get_visualizer)
-            .service(echo)
     });
     // server.route("/", web::get().to(get_index));
     server
@@ -50,12 +52,10 @@ async fn main() -> std::io::Result<()> {
 
 #[get("/temp/{filename:.*}")]
 async fn get_static(req: HttpRequest) -> Result<fs::NamedFile, Error> {
-    // println!("Called get_static!");
-    // println!("{:?}", req);
     let path: PathBuf = ["temp", req.match_info().query("filename")]
         .iter()
         .collect();
-    println!("Looking for: {:?}", path);
+    // println!("Looking for: {:?}", path);
     let file = match fs::NamedFile::open(path) {
         Ok(file) => file,
         Err(e) => {
@@ -71,19 +71,15 @@ async fn get_static(req: HttpRequest) -> Result<fs::NamedFile, Error> {
             parameters: vec![],
         }))
 }
-#[post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    println!("Calling echo!");
-    HttpResponse::Ok().body(req_body)
-}
 
 #[post("/visualizer")]
 async fn get_visualizer(form: web::Form<VisParameters>) -> impl Responder {
     // TODO: Input validation! (Is web form validation enough?)
 
     // println!("Got {:?}", form);
-    let model_path = PathBuf::from("../holoscribe/tests/icosahedron.obj");
-    let model = ObjInterpolator::from_file(model_path.to_str().unwrap().to_string())
+    // let model_path = PathBuf::from("static/dodecahedron.obj");
+
+    let model = ObjInterpolator::from_file(form.model_file.to_str().unwrap().to_string())
         .expect("Valid OBJ model");
     let interpolated_points = model.interpolate_edges(form.stroke_density);
     let circle_strat = scriber::CircleScriber::new();
@@ -118,13 +114,13 @@ async fn get_visualizer(form: web::Form<VisParameters>) -> impl Responder {
 
     // TODO: Rather than save a temporary file on the server, just serve
     // the SVG code directly on the webpage
-    svg::save("temp/cube.svg", &hologram).expect("Error saving SVG");
+    svg::save("temp/visualizer.svg", &hologram).expect("Error saving SVG");
     let response = format!(
         r#"
     <html><head><title>Visualizer!</title></head>
     <body>
     <p>Scribing {} x {} image at density of {}</p>
-    <img src="temp/cube.svg">
+    <img src="temp/visualizer.svg">
     "#,
         &form.width_mm, &form.height_mm, &form.stroke_density
     );
@@ -134,32 +130,34 @@ async fn get_visualizer(form: web::Form<VisParameters>) -> impl Responder {
 #[get("/")]
 async fn get_index() -> HttpResponse {
     // TODO: Have this pull in HTML code from outside of the code
-    let resp = HttpResponse::Ok().content_type("text/html").body(
-        r#"
-        <html><head>
-        <title>HOLO World!</title></head><body>
-        <style>
-        #number {
-            width: 8em;
-        }
-        </style>
-        <form action="/visualizer" method="post">
-        Width: <input id="number" type="number" name="width_mm" min="100" max="2000" value="500" step="50"><br>
-        Height: <input id="number" type="number" name="height_mm" min="100" max="2000" value="500" step="50"><br>
-        Stroke Density: <input id="number" type="number" name="stroke_density" min="5" max="100" value="20"><br>
-        Light Source Start (x, y):
-        <input id="number" type="number" name="light_source_start_x" value="250" step="10">
-        <input id="number" type="number" name="light_source_start_y" value="-100" step="10">
-        <br>
-        Light Source End (x, y):
-        <input id="number" type="number" name="light_source_end_x" value="250" step="10">
-        <input id="number" type="number" name="light_source_end_y" value="-100" step="10">
-        <br>
-        Animation Duration (s): <input id="number" type="number" name="duration_s" step="0.1" value="2.0" min="0.1" max="10.0"><br>
-        <button type="submit">Visualize!</button>
-        </form>
-        </body></html>
-        "#,
-    );
+    let index = render_template().expect("Error rendering template");
+    let resp = HttpResponse::Ok().content_type("text/html").body(index);
     resp
+}
+fn render_template() -> Result<String, tera::Error> {
+    let obj_dir = PathBuf::from("static");
+    let tera = match Tera::new("templates/*.html") {
+        Ok(t) => t,
+        Err(e) => {
+            println!("Terra Erra: {}", e);
+            ::std::process::exit(1);
+        }
+    };
+    let mut context = Context::new();
+    if let Some(model_list) = list_obj_files(obj_dir).ok() {
+        context.insert("model_list", &model_list);
+    }
+    let s = tera.render("index.html", &context)?;
+    Ok(s)
+}
+
+fn list_obj_files(directory: PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut files = Vec::<PathBuf>::new();
+    for file in stdfs::read_dir(directory)? {
+        if let Some(entry) = file.ok() {
+            // println!("found {:?}", entry.path());
+            files.push(entry.path());
+        }
+    }
+    Ok(files)
 }

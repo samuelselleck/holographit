@@ -12,3 +12,4 @@ holoscribe = {path="../holoscribe"}
 holoviz = {path="../holoviz"}
 svg = "0.13.0"
 serde = { version = "1", features=["derive"]}
+tera = "1.18.1"
