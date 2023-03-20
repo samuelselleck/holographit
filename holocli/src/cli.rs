@@ -33,6 +33,10 @@ pub struct Args {
     /// The density of lines etched per mm. Defaults to 1.
     #[arg(long, default_value_t = 1)]
     pub stroke_density: usize,
+
+    /// The scaling factor for translating z coordinates to circle radius
+    #[arg(long, default_value_t = 1.0)]
+    pub z_scale: f32,
 }
 
 /// Represents a size in millimeters
