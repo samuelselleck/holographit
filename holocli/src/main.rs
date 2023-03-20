@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let user_defined_model = ObjInterpolator::from_file(args.input).unwrap();
     let interpolated_points = user_defined_model.interpolate_edges(args.stroke_density);
 
-    let circle_strat = scriber::CircleScriber::new();
+    let circle_strat = scriber::CircleScriber::new(args.z_scale);
     let scriber = scriber::Scriber::new(
         circle_strat,
         (args.canvas_size.width, args.canvas_size.height),

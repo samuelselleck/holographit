@@ -48,8 +48,8 @@ pub struct CircleScriber {
 }
 
 impl CircleScriber {
-    pub fn new() -> Self {
-        CircleScriber { z_scale_factor: 0.25 }
+    pub fn new(z_scale_factor: f32) -> Self {
+        CircleScriber { z_scale_factor }
     }
 }
 
