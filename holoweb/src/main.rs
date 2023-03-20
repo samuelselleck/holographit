@@ -74,21 +74,8 @@ async fn get_visualizer(form: web::Form<VisParameters>) -> impl Responder {
     let canvas_size = (form.width_mm, form.height_mm);
     let scriber = scriber::Scriber::new(circle_strat, canvas_size);
     let svg = scriber.scribe(&interpolated_points);
-    // TODO: Don't save to a temporary file. Requires more fixes for the
-    // visualizer library such that a visualizer can be built from a
-    // svg struct.
-    svg::save("temp/scriber.svg", &svg).expect("Error saving scriber SVG");
 
-    // TODO: Skip writing to a buffer and just pass along the
-    // SVG document instead.
-    // let buf = Vec::<u8>::new();
-    // svg::write(buf.clone(), &svg).expect("Error writing SVG");
-    // println!("Buffer Contents: {:?}", buf);
-    // let contents = str::from_utf8(&buf).unwrap();
-    // println!("SVG Contents: {:?}", contents);
-
-    let viz = Visualizer::from_file(PathBuf::from("temp/scriber.svg"))
-        .expect("Error building visualizer");
+    let viz = Visualizer::from_svg_contents(svg.to_string());
 
     let ls_start = holoviz::Point {
         x: form.light_source_start_x,
