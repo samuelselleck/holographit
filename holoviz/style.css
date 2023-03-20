@@ -1,3 +1,6 @@
+svg {
+    background-color: black;
+}
 circle.inputCircle {
     stroke: white;
     fill-opacity: 0;

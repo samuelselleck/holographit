@@ -7,6 +7,11 @@ use svg::node::element::{Animate, Circle, Path, Style, SVG};
 use svg::parser::Event;
 use svg::Document;
 
+use glam::Vec2;
+
+#[macro_use]
+extern crate is_close;
+
 extern crate test;
 // width of reflected hologram segments in degrees
 const HOLO_WIDTH_DEG: f32 = 3.5;
@@ -72,6 +77,7 @@ impl Visualizer {
         Ok(Self::from_svg_contents(content))
     }
 
+    // TODO: Add file to allow this test to run
     /// Build a static hologram from the visualizer
     /// ```no_run
     /// # use std::io;
@@ -109,6 +115,7 @@ impl Visualizer {
             .add(viewbox)
     }
 
+    // TODO: Add file to allow this test to run
     /// Build an animated hologram from the visualizer. Requires starting
     /// and ending positions of light source relative to the canvas. The
     /// animation will loop back & forth from one light source to the other
@@ -273,8 +280,31 @@ fn circular_arc_hologram_path(
     path_data
 }
 
-/*
-*/
+#[allow(unused)]
+/// Given a circle and a light source, find the angle from the +X axis
+/// to the vector connecting the two. If light source is inside the circle
+/// then return None. This function is unused, but is left in because the
+/// logic and the associated unit tests are important, and need to be
+/// incorporated elsewhere in the library.
+fn incidence_angle(circle: &Circle, light_source: &Vec2) -> Option<f32> {
+    let circle_attrs = circle.get_attributes();
+    let cx = circle_attrs["cx"]
+        .parse::<f32>()
+        .expect("Circle should have an x-coordinate");
+    let cy = circle_attrs["cy"]
+        .parse::<f32>()
+        .expect("Circle should have a y-coordinate");
+    let r = circle_attrs["r"]
+        .parse::<f32>()
+        .expect("Circle should have a radius");
+    // check that light source is not inside circle
+    let center_to_light = *light_source - Vec2::new(cx, cy);
+    if center_to_light.length() <= r {
+        return None;
+    }
+    let theta = center_to_light.angle_between(Vec2::X);
+    Some(theta)
+}
 
 /// Given path data in the form of commands, return a string
 /// as would be represented in a rendered SVG file.
@@ -324,6 +354,7 @@ fn animated_arc(
     duration_secs: f32,
 ) -> Path {
     assert!(duration_secs > 0f32);
+    // TODO: Break out code into a function that returns a tuple of cx, cy, r
     let circle_attrs = input_circle.get_attributes();
     let cx = circle_attrs["cx"]
         .parse::<f32>()
@@ -334,14 +365,55 @@ fn animated_arc(
     let r = circle_attrs["r"]
         .parse::<f32>()
         .expect("Circle should have a radius");
-    let frame_start = circular_arc_hologram_path(cx, cy, r, HOLO_WIDTH_DEG, light_source_start);
-    let frame_end = circular_arc_hologram_path(cx, cy, r, HOLO_WIDTH_DEG, light_source_end);
-    let animation_data: String = [
-        data_to_string(&frame_start),
-        data_to_string(&frame_end),
-        data_to_string(&frame_start),
-    ]
-    .join(";");
+
+    let center = Vec2::new(cx, cy); // center of circle
+                                    // vectors from center of circle to light source start & end
+    let vec_start = Vec2::new(light_source_start.x, light_source_start.y) - center;
+    let vec_end = Vec2::new(light_source_end.x, light_source_end.y) - center;
+
+    // angle between vectors
+    let sweep_angle = vec_end.angle_between(vec_start);
+
+    // number of steps & step size for interpolation between points
+    let num_steps: usize = (sweep_angle.abs() / HOLO_WIDTH_DEG.to_radians()) as usize;
+    let step_size = sweep_angle / num_steps as f32;
+
+    // angle at which to draw arc
+    let start_angle = vec_start.angle_between(Vec2::X);
+    let mut frames: Vec<Data> = Vec::new(); // animation frames
+
+    // Create animation frames one by one
+    for step in 0..=num_steps {
+        let angle = start_angle + step as f32 * step_size;
+        // TODO: Check that light source isn't inside circle
+        // This isn't actually as trivial as it seems, and may require some
+        // resturcturing. This requires the ability to have arcs turn
+        // on and off, which I think requires another animation sequence
+        // for arcs that may turn on or off.
+
+        // If an arc goes "off" due to light source going through the circle
+        // (under the arc) it will need a new animation element with as many
+        // frames as the path animation; this animation will have attributeName
+        // of "stroke-opacity" and values being an array of booleans
+        frames.push(circular_arc_by_angle(&center, r, angle, HOLO_WIDTH_DEG));
+    }
+
+    // Generate the animation frames for the opposite direction
+    let mut rev_frames = frames.clone();
+    rev_frames.pop(); // don't draw the middle frame twice
+                      // I.e. [ A, B, C ] should become [ A, B, C, B, A ]
+                      // and not [A, B, C, C, B, A]
+    rev_frames.reverse();
+    frames.append(&mut rev_frames);
+
+    // Build the animation data to attach to the path element
+    let animation_data: String = frames
+        .iter()
+        .map(|frame| data_to_string(frame))
+        .collect::<Vec<String>>()
+        .join(";");
+
+    // Finally build the path element and return it
     let animated_arc = Path::new().add(
         Animate::new()
             .set("dur", duration_secs)
@@ -351,6 +423,14 @@ fn animated_arc(
     );
 
     animated_arc
+}
+
+fn circular_arc_by_angle(center: &Vec2, radius: f32, angle: f32, width_deg: f32) -> Data {
+    let start = *center + Vec2::from_angle(angle - width_deg.to_radians() / 2f32) * radius;
+    let end = *center + Vec2::from_angle(angle + width_deg.to_radians() / 2f32) * radius;
+    Data::new()
+        .move_to((start.x, start.y))
+        .elliptical_arc_to((radius, radius, 0, 0, 1, end.x, end.y))
 }
 
 #[cfg(test)]
@@ -459,6 +539,39 @@ mod tests {
                 .as_tuple(),
             (0., 0., DEFAULT_WIDTH_PX, DEFAULT_HEIGHT_PX)
         );
+    }
+
+    #[test]
+    fn test_incidence_angle() {
+        let c = Circle::new().set("cx", 0).set("cy", 0).set("r", 100);
+
+        // point inside circle, angle should be None
+        let ls = Vec2::new(10f32, 10f32);
+        assert_eq!(incidence_angle(&c, &ls), None);
+
+        // point directly above circle, angle should be 90
+        let ls = Vec2::new(0., -150.);
+        assert!(is_close!(
+            incidence_angle(&c, &ls).unwrap(),
+            std::f32::consts::FRAC_PI_2,
+            rel_tol = 1e-3
+        ));
+
+        // point directly below circle, angle should be -90
+        let ls = Vec2::new(0., 150.);
+        assert!(is_close!(
+            incidence_angle(&c, &ls).unwrap(),
+            -std::f32::consts::FRAC_PI_2,
+            rel_tol = 1e-3
+        ));
+
+        // point on x axis, should be 0
+        let ls = Vec2::new(150., 0.);
+        assert_eq!(incidence_angle(&c, &ls), Some(0.));
+
+        // point on -x axis, should be pi
+        let ls = Vec2::new(-150., 0.);
+        assert_eq!(incidence_angle(&c, &ls), Some(-std::f32::consts::PI));
     }
 
     /* "INTEGRATION TESTS" */

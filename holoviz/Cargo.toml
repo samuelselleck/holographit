@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 svg = "0.13.0"
 clap = {version = "4", features=["derive"]}
+glam = "0.23.0"
+is_close = "0.1.3"
