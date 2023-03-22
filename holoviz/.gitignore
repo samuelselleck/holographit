@@ -7,3 +7,4 @@
 !tests/test4.svg
 *.swp
 Cargo.lock
+perf.data*

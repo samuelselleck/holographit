@@ -439,6 +439,16 @@ mod tests {
     use test::Bencher;
 
     #[bench]
+    fn bench_animated_arc(b: &mut Bencher) {
+        let input_circle = Circle::new().set("cx", 0).set("cy", 0).set("r", 100);
+        let light_source_start = Point { x: 300., y: -100. };
+        let light_source_end = Point { x: 400., y: -10. };
+        b.iter(|| {
+            let _ = animated_arc(&input_circle, &light_source_start, &light_source_end, 5.0);
+        });
+    }
+
+    #[bench]
     fn build_static_hologram(b: &mut Bencher) {
         let viz = Visualizer::from_file(PathBuf::from("tests/icosahedron.svg"))
             .expect("valid input file");
