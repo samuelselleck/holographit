@@ -306,38 +306,6 @@ fn incidence_angle(circle: &Circle, light_source: &Vec2) -> Option<f32> {
     Some(theta)
 }
 
-/// Given path data in the form of commands, return a string
-/// as would be represented in a rendered SVG file.
-/// ```ignore
-/// use svg::node::element::path::Data;
-/// let data = Data::new()
-///     .move_to((0, 0))
-///     .elliptical_arc_to((80, 80, 0, 0, 0, 10, 10));
-/// assert_eq!(data_to_string(&data), "M0 0 A80 80 0 0 0 10 10");
-/// ```
-/// This function only works for data with Move and Elliptical Arc commands.
-/// Any other commands in the path data will cause an unimplemented! failure.
-fn data_to_string(data: Data) -> String {
-    let mut result = String::new();
-    for command in data.iter() {
-        let params = match command {
-            Command::Move(_, params) => {
-                result.push('M');
-                params
-            }
-            Command::EllipticalArc(_, params) => {
-                result.push('A');
-                params
-            }
-            _ => unimplemented!(),
-        };
-        for param in params.iter() {
-            result = result + &format!("{} ", param);
-        }
-    }
-    result.trim().to_string()
-}
-
 /// Given an input circle and starting & ending positions for a light
 /// source, return a Path object with an animated SVG arc representing
 /// a hologram of the light moving back and forth between the two
@@ -388,12 +356,12 @@ fn animated_arc(
     for step in 0..=num_frames {
         if step < num_steps {
             let angle = start_angle + step as f32 * step_size;
-            frames.push(data_to_string(circular_arc_by_angle(
+            frames.push(circular_arc_animation_by_angle(
                 &center,
                 r,
                 angle,
                 HOLO_WIDTH_DEG,
-            )));
+            ));
             animation_data.push_str(&frames[step]);
         } else if step > num_steps {
             animation_data.push_str(&frames[num_frames - step]);
@@ -423,12 +391,18 @@ fn animated_arc(
     animated_arc
 }
 
-fn circular_arc_by_angle(center: &Vec2, radius: f32, angle: f32, width_deg: f32) -> Data {
+fn circular_arc_animation_by_angle(
+    center: &Vec2,
+    radius: f32,
+    angle: f32,
+    width_deg: f32,
+) -> String {
     let start = *center + Vec2::from_angle(angle - width_deg.to_radians() / 2f32) * radius;
     let end = *center + Vec2::from_angle(angle + width_deg.to_radians() / 2f32) * radius;
-    Data::new()
-        .move_to((start.x, start.y))
-        .elliptical_arc_to((radius, radius, 0, 0, 1, end.x, end.y))
+    format!(
+        "M{} {} A{} {} 0 0 1 {} {}",
+        start.x, start.y, radius, radius, end.x, end.y
+    )
 }
 
 #[cfg(test)]
@@ -465,13 +439,6 @@ mod tests {
         b.iter(|| {
             viz.build_animated_hologram(&ls_start, &ls_end, duration_secs);
         })
-    }
-    #[test]
-    fn test_data_to_string() {
-        let data = Data::new()
-            .move_to((0, 0))
-            .elliptical_arc_to((80, 80, 0, 0, 0, 10, 10));
-        assert_eq!(data_to_string(data), "M0 0 A80 80 0 0 0 10 10")
     }
 
     #[test]
