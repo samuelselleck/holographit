@@ -317,7 +317,7 @@ fn incidence_angle(circle: &Circle, light_source: &Vec2) -> Option<f32> {
 /// ```
 /// This function only works for data with Move and Elliptical Arc commands.
 /// Any other commands in the path data will cause an unimplemented! failure.
-fn data_to_string(data: &Data) -> String {
+fn data_to_string(data: Data) -> String {
     let mut result = String::new();
     for command in data.iter() {
         let params = match command {
@@ -376,15 +376,30 @@ fn animated_arc(
 
     // number of steps & step size for interpolation between points
     let num_steps: usize = (sweep_angle.abs() / HOLO_WIDTH_DEG.to_radians()) as usize;
+    let num_frames: usize = num_steps * 2 - 1;
     let step_size = sweep_angle / num_steps as f32;
 
     // angle at which to draw arc
     let start_angle = vec_start.angle_between(Vec2::X);
-    let mut frames: Vec<Data> = Vec::new(); // animation frames
+    let mut frames: Vec<String> = Vec::new(); // animation frames
+    let mut animation_data = String::new();
 
     // Create animation frames one by one
-    for step in 0..=num_steps {
-        let angle = start_angle + step as f32 * step_size;
+    for step in 0..=num_frames {
+        if step < num_steps {
+            let angle = start_angle + step as f32 * step_size;
+            frames.push(data_to_string(circular_arc_by_angle(
+                &center,
+                r,
+                angle,
+                HOLO_WIDTH_DEG,
+            )));
+            animation_data.push_str(&frames[step]);
+        } else if step > num_steps {
+            animation_data.push_str(&frames[num_frames - step]);
+        } else {
+            continue;
+        }
         // TODO: Check that light source isn't inside circle
         // This isn't actually as trivial as it seems, and may require some
         // resturcturing. This requires the ability to have arcs turn
@@ -395,25 +410,8 @@ fn animated_arc(
         // (under the arc) it will need a new animation element with as many
         // frames as the path animation; this animation will have attributeName
         // of "stroke-opacity" and values being an array of booleans
-        frames.push(circular_arc_by_angle(&center, r, angle, HOLO_WIDTH_DEG));
     }
 
-    // Generate the animation frames for the opposite direction
-    let mut rev_frames = frames.clone();
-    rev_frames.pop(); // don't draw the middle frame twice
-                      // I.e. [ A, B, C ] should become [ A, B, C, B, A ]
-                      // and not [A, B, C, C, B, A]
-    rev_frames.reverse();
-    frames.append(&mut rev_frames);
-
-    // Build the animation data to attach to the path element
-    let animation_data: String = frames
-        .iter()
-        .map(|frame| data_to_string(frame))
-        .collect::<Vec<String>>()
-        .join(";");
-
-    // Finally build the path element and return it
     let animated_arc = Path::new().add(
         Animate::new()
             .set("dur", duration_secs)
@@ -473,7 +471,7 @@ mod tests {
         let data = Data::new()
             .move_to((0, 0))
             .elliptical_arc_to((80, 80, 0, 0, 0, 10, 10));
-        assert_eq!(data_to_string(&data), "M0 0 A80 80 0 0 0 10 10")
+        assert_eq!(data_to_string(data), "M0 0 A80 80 0 0 0 10 10")
     }
 
     #[test]
